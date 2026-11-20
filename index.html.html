@@ -1,0 +1,1150 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Christmas Eve — Van Gogh Oil Painting</title>
+<style>
+*{margin:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden}
+body{background:#17264a;font-family:Georgia,serif}
+canvas{display:block}
+.hud{
+ position:fixed;top:22px;left:0;width:100%;text-align:center;
+ color:#f3dfb4;pointer-events:none;text-shadow:0 2px 12px #101a35;
+}
+.hud h1{font-size:21px;letter-spacing:6px;font-weight:normal}
+.hud p{margin-top:7px;font:10px Arial,sans-serif;letter-spacing:3px;color:#d1c49e}
+.tip{
+ position:fixed;bottom:18px;width:100%;text-align:center;
+ color:#e6d4ae;font:10px Arial,sans-serif;letter-spacing:2px;
+ pointer-events:none;text-shadow:0 1px 8px #111a33;
+}
+</style>
+</head>
+<body>
+<div class="hud"><h1>CHRISTMAS EVE</h1><p>A COZY CABIN · VAN GOGH INSPIRED OIL PAINTING</p></div>
+<div class="tip">DRAG TO ROTATE · SCROLL TO ZOOM</div>
+
+<script type="importmap">
+{"imports":{
+ "three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+ "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+
+// ============================================================
+// Scene — warm Christmas Eve light inside a painted Starry Night
+// ============================================================
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x18284c);
+const camera=new THREE.PerspectiveCamera(38,innerWidth/innerHeight,.1,120);
+camera.position.set(6.6,5.5,8.9);
+
+const renderer=new THREE.WebGLRenderer({antialias:true,alpha:false});
+renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));
+renderer.setSize(innerWidth,innerHeight);
+renderer.outputColorSpace=THREE.SRGBColorSpace;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.34;
+document.body.appendChild(renderer.domElement);
+
+const controls=new OrbitControls(camera,renderer.domElement);
+controls.enableDamping=true;
+controls.dampingFactor=.045;
+controls.autoRotate=true;
+controls.autoRotateSpeed=.27;
+controls.minDistance=6.5;
+controls.maxDistance=14;
+controls.target.set(0,2.55,.25);
+controls.maxPolarAngle=Math.PI*.49;
+
+scene.add(new THREE.HemisphereLight(0xc4d6ef,0x754b35,1.25));
+const moonFill=new THREE.DirectionalLight(0x9db9e4,1.25);
+moonFill.position.set(-6,9,-7);scene.add(moonFill);
+const hearthLight=new THREE.PointLight(0xff9c4b,75,19,1.6);
+hearthLight.position.set(-4.2,1.9,2.5);scene.add(hearthLight);
+const warmBounce=new THREE.PointLight(0xffc16b,38,14,1.8);
+warmBounce.position.set(2.4,3.0,4.2);scene.add(warmBounce);
+const softGold=new THREE.PointLight(0xffd991,18,12,1.8);
+softGold.position.set(0,4.8,1.2);scene.add(softGold);
+
+const C={
+ night:0x17264a,navy:0x203b67,blue:0x315b82,blueLight:0x6f91ad,
+ deep:0x103e3d,forest:0x145247,teal:0x1b6c60,
+ green:0x287c5b,emerald:0x3a966e,mint:0x8dbb98,
+ leafLight:0xb2c69c,cream:0xf0dfb6,
+ gold:0xe5ad4e,goldLight:0xffdf91,
+ red:0xb8323d,redLight:0xe35a50,rose:0xc86b83,
+ purple:0x70527e,brown:0x70452e
+};
+const material=(color,rough=.9,metal=.0,emissive=0x000000,intensity=0)=>
+ new THREE.MeshStandardMaterial({color,roughness:rough,metalness:metal,emissive,emissiveIntensity:intensity,flatShading:true});
+
+function rand(a,b){return a+Math.random()*(b-a)}
+function addMesh(parent,geo,mat,pos=[0,0,0]){
+ const m=new THREE.Mesh(geo,mat);m.position.set(...pos);parent.add(m);return m;
+}
+
+// ============================================================
+// Painterly 360° background texture: swirling blue sky, stars,
+// moonlight and a little hearth vignette painted into the scene.
+// ============================================================
+function makeSkyPainting(){
+ const c=document.createElement('canvas');c.width=2048;c.height=1024;
+ const ctx=c.getContext('2d');
+ const g=ctx.createLinearGradient(0,0,0,1024);
+ g.addColorStop(0,'#172957');g.addColorStop(.48,'#294b72');g.addColorStop(1,'#182b49');
+ ctx.fillStyle=g;ctx.fillRect(0,0,c.width,c.height);
+
+ // Broad impasto sky strokes in sweeping, curved directions.
+ const skyColors=['#345e88','#426f91','#203f70','#557e9b','#243d68','#66879a','#8a927e'];
+ for(let layer=0;layer<5;layer++){
+  for(let i=0;i<150;i++){
+   const x=rand(-100,2148),y=rand(40,760);
+   const len=rand(45,190),amp=rand(8,32);
+   const a=rand(-.2,.2);
+   ctx.beginPath();
+   ctx.moveTo(x,y);
+   ctx.bezierCurveTo(x+len*.25,y-amp,x+len*.7,y+amp,x+len,y+rand(-8,8));
+   ctx.strokeStyle=skyColors[Math.floor(Math.random()*skyColors.length)];
+   ctx.lineWidth=rand(3,12);ctx.lineCap='round';ctx.globalAlpha=rand(.20,.55);
+   ctx.stroke();
+  }
+ }
+ ctx.globalAlpha=1;
+
+ // Giant Starry Night-like spirals.
+ for(let s=0;s<5;s++){
+  const cx=[300,780,1270,1710,1920][s],cy=[250,170,340,180,430][s];
+  for(let k=0;k<5;k++){
+   ctx.beginPath();
+   for(let j=0;j<=150;j++){
+    const t=j/150*Math.PI*2.4;
+    const r=18+t*(15+k*2);
+    const x=cx+Math.cos(t+s*.8)*r;
+    const y=cy+Math.sin(t+s*.8)*r*.52;
+    if(j===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+   }
+   ctx.strokeStyle=k%2?'#7897a5':'#e0c77d';
+   ctx.lineWidth= k===0?7:rand(2,5);ctx.globalAlpha=.28+k*.045;ctx.stroke();
+  }
+ }
+ ctx.globalAlpha=1;
+
+ // Stars with painted halos and hand-brushed rays.
+ for(let i=0;i<85;i++){
+  const x=rand(30,2018),y=rand(35,610),r=rand(3,10);
+  const halo=ctx.createRadialGradient(x,y,0,x,y,r*5);
+  halo.addColorStop(0,'rgba(255,225,151,.48)');
+  halo.addColorStop(1,'rgba(255,225,151,0)');
+  ctx.fillStyle=halo;ctx.beginPath();ctx.arc(x,y,r*5,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle=i%3?'#e8dcae':'#fff0bd';
+  ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();
+  ctx.strokeStyle='#e9d49b';ctx.lineWidth=2;ctx.globalAlpha=.65;
+  ctx.beginPath();ctx.moveTo(x-r*2.5,y);ctx.lineTo(x+r*2.5,y);ctx.moveTo(x,y-r*2.5);ctx.lineTo(x,y+r*2.5);ctx.stroke();
+  ctx.globalAlpha=1;
+ }
+
+ // Low horizon: painterly silhouettes of distant winter houses.
+ for(let i=0;i<24;i++){
+  const x=i*95-40,base=880+rand(-25,25),w=rand(45,100),h=rand(55,145);
+  ctx.fillStyle=i%2?'#172b45':'#203b55';
+  ctx.fillRect(x,base-h,w,h);
+  ctx.fillStyle='#e6a65c';ctx.globalAlpha=.6;
+  for(let wx=x+10;wx<x+w-8;wx+=22){
+   ctx.fillRect(wx,base-h+22,8,13);
+  }
+  ctx.globalAlpha=1;
+ }
+ // Painted fireplace at the right side of the panorama.
+ const fx=1590,fy=850;
+ ctx.fillStyle='#513e43';ctx.fillRect(fx-155,fy-190,310,220);
+ ctx.fillStyle='#89614e';ctx.fillRect(fx-132,fy-168,264,195);
+ ctx.fillStyle='#1d263c';ctx.fillRect(fx-105,fy-145,210,172);
+ // Warm fire glow.
+ const fireGlow=ctx.createRadialGradient(fx,fy-55,5,fx,fy-55,260);
+ fireGlow.addColorStop(0,'rgba(255,205,112,.85)');
+ fireGlow.addColorStop(.35,'rgba(232,117,57,.32)');
+ fireGlow.addColorStop(1,'rgba(232,117,57,0)');
+ ctx.fillStyle=fireGlow;ctx.fillRect(fx-270,fy-330,540,420);
+ // Painted flame strokes.
+ for(let i=0;i<34;i++){
+  const x=fx+rand(-78,78),y=fy+rand(-125,-35);
+  ctx.beginPath();ctx.moveTo(x,y+50);
+  ctx.quadraticCurveTo(x+rand(-40,40),y+rand(-35,15),x+rand(-18,18),y-65-rand(0,45));
+  ctx.strokeStyle=i%3?'#e66d3e':'#ffd77b';
+  ctx.lineWidth=rand(5,15);ctx.lineCap='round';ctx.globalAlpha=rand(.45,.85);ctx.stroke();
+ }
+ ctx.globalAlpha=1;
+ // Fire-side brushy stone strokes.
+ for(let i=0;i<75;i++){
+  const x=fx+rand(-175,175),y=fy+rand(-210,45);
+  ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+rand(-22,22),y+rand(-4,7));
+  ctx.strokeStyle=i%2?'#b27b56':'#d6a16b';ctx.lineWidth=rand(2,7);ctx.globalAlpha=.4;ctx.stroke();
+ }
+ ctx.globalAlpha=1;
+
+ // Varnish-like fine brush flecks across the entire painting.
+ for(let i=0;i<2800;i++){
+  const x=rand(0,c.width),y=rand(0,c.height);
+  ctx.strokeStyle=i%3?'#d5c49a':'#7fa1ac';
+  ctx.globalAlpha=rand(.025,.12);ctx.lineWidth=rand(.5,2);
+  ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+rand(2,12),y+rand(-2,2));ctx.stroke();
+ }
+ ctx.globalAlpha=1;
+ const tex=new THREE.CanvasTexture(c);tex.colorSpace=THREE.SRGBColorSpace;
+ tex.wrapS=THREE.RepeatWrapping;tex.anisotropy=4;
+ return tex;
+}
+const skyTexture=makeSkyPainting();
+const sky=addMesh(scene,new THREE.SphereGeometry(42,64,40),
+ new THREE.MeshBasicMaterial({map:skyTexture,side:THREE.BackSide}),[0,0,0]);
+
+// A painted floor with loose blue/ochre brush marks.
+function makeFloorTexture(){
+ const c=document.createElement('canvas');c.width=1024;c.height=1024;
+ const ctx=c.getContext('2d');
+ ctx.fillStyle='#293e5b';ctx.fillRect(0,0,1024,1024);
+ const cols=['#375a70','#4b6872','#8a7259','#c08a56','#344d67','#6f796e'];
+ for(let i=0;i<1800;i++){
+  const x=rand(0,1024),y=rand(0,1024),len=rand(10,80);
+  ctx.beginPath();ctx.moveTo(x,y);ctx.quadraticCurveTo(x+len*.5,y+rand(-12,12),x+len,y+rand(-8,8));
+  ctx.strokeStyle=cols[Math.floor(Math.random()*cols.length)];
+  ctx.globalAlpha=rand(.08,.28);ctx.lineWidth=rand(2,8);ctx.lineCap='round';ctx.stroke();
+ }
+ ctx.globalAlpha=1;
+ const tex=new THREE.CanvasTexture(c);tex.colorSpace=THREE.SRGBColorSpace;return tex;
+}
+const floor=addMesh(scene,new THREE.PlaneGeometry(13.0,9.6),
+ new THREE.MeshStandardMaterial({map:makeFloorTexture(),roughness:1}),[0,-.62,0]);
+floor.rotation.x=-Math.PI/2;
+
+// ============================================================
+// 3D oil-paint brush strokes — tapered, curved, raised ribbons.
+// No cone shells: foliage itself is built from flowing strokes.
+// ============================================================
+const tree=new THREE.Group();scene.add(tree);
+
+function brushRibbon(parent,points,width,color,opts={}){
+ const pts=points.map(p=>new THREE.Vector3(...p));
+ const curve=new THREE.CatmullRomCurve3(pts);
+ const steps=opts.steps||9;
+ const vertices=[],indices=[],uvs=[];
+ const up=new THREE.Vector3(0,1,0);
+ for(let i=0;i<=steps;i++){
+  const t=i/steps;
+  const p=curve.getPoint(t);
+  const tangent=curve.getTangent(t).normalize();
+  let side=new THREE.Vector3().crossVectors(tangent,up).normalize();
+  if(side.length()<.1)side.set(1,0,0);
+  let normal=new THREE.Vector3().crossVectors(side,tangent).normalize();
+  const radial=new THREE.Vector3(p.x,0,p.z).normalize();
+  if(normal.dot(radial)<0)normal.negate();
+  const taper=Math.pow(Math.sin(Math.PI*Math.max(.001,t)),opts.taper||.72);
+  const wav=1+.12*Math.sin(t*19+(opts.phase||0))+.05*Math.sin(t*37);
+  const w=width*taper*wav;
+  const ridge=opts.ridge||.018;
+  const left=p.clone().addScaledVector(side,-w);
+  const mid=p.clone().addScaledVector(normal,ridge);
+  const right=p.clone().addScaledVector(side,w);
+  vertices.push(left.x,left.y,left.z,mid.x,mid.y,mid.z,right.x,right.y,right.z);
+  uvs.push(0,t,.5,t,1,t);
+  if(i>0){
+   const a=(i-1)*3,b=i*3;
+   indices.push(a,b,a+1,a+1,b,b+1,a+1,b+1,a+2,a+2,b+1,b+2);
+  }
+ }
+ const geo=new THREE.BufferGeometry();
+ geo.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));
+ geo.setAttribute('uv',new THREE.Float32BufferAttribute(uvs,2));
+ geo.setIndex(indices);geo.computeVertexNormals();
+ const mesh=new THREE.Mesh(geo,material(color,opts.roughness??.96,0,opts.emissive||0,opts.emissiveIntensity||0));
+ parent.add(mesh);
+ return mesh;
+}
+
+function paintStrokeLine(parent,points,color,r=.018){
+ const curve=new THREE.CatmullRomCurve3(points.map(p=>new THREE.Vector3(...p)));
+ const mesh=new THREE.Mesh(new THREE.TubeGeometry(curve,12,r,4,false),
+   material(color,.98));
+ parent.add(mesh);return mesh;
+}
+
+// ============================================================
+// Trunk — visible painterly strokes, not a smooth cylinder
+// ============================================================
+const trunkBase=addMesh(tree,new THREE.CylinderGeometry(.19,.30,1.18,9),
+ material(C.brown,1),[0,.03,0]);
+for(let i=0;i<28;i++){
+ const a=i/28*Math.PI*2,rad=.23;
+ const x=Math.cos(a)*rad,z=Math.sin(a)*rad;
+ brushRibbon(tree,[
+  [x,-.52,z],[x+.025,-.20,z+.02],[x-.02,.12,z-.02],[x+.015,.58,z]
+ ],rand(.018,.04),i%4===0?0xb48b55:(i%2?0x4d382d:0x8a5a37),
+ {steps:7,ridge:.012});
+}
+
+// ============================================================
+// Foliage: soft, dense, overlapping curved brush clusters.
+// Each tier is irregular and fluffy, with curled leaf strokes.
+// ============================================================
+const greenTier=[0x0d403b,0x14564b,0x17675a,0x1f765c,0x2d8966,0x3e9a70,0x6ea783,0x91b58c,0xb1bd93,0x315f70,0x426f7c];
+const pinkTier=[0x7b516f,0x915b79,0xa05c79,0xc07886,0xd68aa1,0xe1b0bb,0xb08b98,0x8b677f];
+const highlightTier=[0xc3c69e,0xb1bd93,0x8ea98b,0xf0dfb6];
+const tierPalettes=[
+ {main:greenTier, accent:highlightTier},
+ {main:pinkTier, accent:[0xe6cfab,0xd89fb0,0xc47a91]},
+ {main:greenTier, accent:highlightTier},
+ {main:pinkTier, accent:[0xe7d4af,0xd38ca3,0xb5718d]},
+ {main:greenTier, accent:[0xf0dfb6,0xa7ba95,0x81a786]}
+];
+const tiers=[
+ {y:4.62,r:.92,drop:.82,count:30,topFill:22},
+ {y:3.84,r:1.34,drop:.88,count:32,topFill:18},
+ {y:2.96,r:1.82,drop:.94,count:34,topFill:12},
+ {y:2.04,r:2.24,drop:.98,count:37,topFill:8},
+ {y:1.15,r:2.54,drop:.90,count:40,topFill:6}
+];
+
+tiers.forEach((T,ti)=>{
+ const phase=ti*.21;
+ const palette=tierPalettes[ti];
+ for(let b=0;b<T.count;b++){
+  const a=b/T.count*Math.PI*2+phase+rand(-.035,.035);
+  const ca=Math.cos(a),sa=Math.sin(a);
+  const outer=T.r*rand(.91,1.08);
+  const startR=rand(.08,.22);
+  const endY=T.y-T.drop*rand(.83,1.06);
+  const mainColor=palette.main[Math.floor(Math.random()*palette.main.length)];
+  // Main flowing bough, curved down like a painted branch.
+  const mainPts=[
+   [ca*startR,T.y+rand(-.04,.10),sa*startR],
+   [ca*(outer*.34),T.y-T.drop*.12,sa*(outer*.34)],
+   [ca*(outer*.69),T.y-T.drop*.43,sa*(outer*.69)],
+   [ca*outer,endY,sa*outer]
+  ];
+  brushRibbon(tree,mainPts,rand(.075,.125),mainColor,{steps:12,ridge:.035,phase:rand(0,8)});
+
+  // Layered leaf clusters fan off both sides of the branch.
+  const sprays=ti<2?4:5;
+  for(let s=0;s<sprays;s++){
+   const t=.24+s*.145+rand(-.025,.025);
+   const rr=startR+(outer-startR)*t;
+   const yy=T.y-T.drop*t*.72;
+   for(const side of [-1,1]){
+    const sideAngle=a+side*rand(.12,.28);
+    const len=rand(.25,.52)*(0.85+ti*.06);
+    const tipR=rr+len*.74;
+    const tipY=yy-rand(.12,.34);
+    const leafPalette = Math.random() > .26 ? palette.main : palette.accent;
+    const color = leafPalette[Math.floor(Math.random() * leafPalette.length)];
+    const leafPts=[
+     [ca*rr,yy,sa*rr],
+     [Math.cos(sideAngle)*(rr+len*.32),yy+.05,Math.sin(sideAngle)*(rr+len*.32)],
+     [Math.cos(sideAngle+.035*side)*(rr+len*.75),tipY+.04,Math.sin(sideAngle+.035*side)*(rr+len*.75)],
+     [Math.cos(sideAngle+.08*side)*tipR,tipY-rand(.025,.09),Math.sin(sideAngle+.08*side)*tipR]
+    ];
+    brushRibbon(tree,leafPts,rand(.045,.09),color,{steps:9,ridge:.025,phase:rand(0,6)});
+    // A thin, offset paint ridge gives the leaf a hand-loaded brush highlight.
+    if(Math.random()>.42){
+     const hi=leafPts.map((p,i)=>[p[0]*1.008,p[1]+.018,p[2]*1.008]);
+     brushRibbon(tree,hi,rand(.009,.018),Math.random()>.5?0x9ab98e:0xc3c69e,
+       {steps:7,ridge:.009,taper:.9});
+    }
+   }
+  }
+
+  // A loose curl at the tip — a Van Gogh-like turning leaf mark.
+  const curlR=outer*.78;
+  const curlPts=[];
+  for(let q=0;q<5;q++){
+   const t=q/4;
+   const aa=a+.12+Math.sin(t*Math.PI)*.13;
+   const rr=curlR+t*.34;
+   curlPts.push([Math.cos(aa)*rr,endY+.12*Math.sin(t*Math.PI)-t*.08,Math.sin(aa)*rr]);
+  }
+  const curlPalette = Math.random() > .22 ? palette.main : palette.accent;
+  brushRibbon(tree,curlPts,rand(.025,.05),
+    curlPalette[Math.floor(Math.random() * curlPalette.length)],
+    {steps:9,ridge:.018,taper:.85});
+ }
+
+ // Extra crown foliage so the top view feels full and layered.
+ for(let c=0;c<T.topFill;c++){
+  const a=c/T.topFill*Math.PI*2+phase*.7+rand(-.08,.08);
+  const rr=T.r*rand(.18,.78);
+  const y=T.y-rand(.06,T.drop*.45);
+  const len=rand(.12,.26);
+  const pts=[
+    [Math.cos(a)*rr,y,Math.sin(a)*rr],
+    [Math.cos(a+.08)*(rr+len*.28),y+.04,Math.sin(a+.08)*(rr+len*.28)],
+    [Math.cos(a+.16)*(rr+len*.60),y-rand(.02,.09),Math.sin(a+.16)*(rr+len*.60)]
+  ];
+  const col=(c%3===0?palette.accent:palette.main)[Math.floor(Math.random()*((c%3===0?palette.accent:palette.main).length))];
+  brushRibbon(tree,pts,rand(.028,.055),col,{steps:6,ridge:.016,taper:.82});
+ }
+});
+
+// Fill the spaces between tiers with smaller loose curved paint marks.
+// They create soft volume without a solid cone underneath.
+for(let i=0;i<360;i++){
+ const y=rand(.88,4.82);
+ const maxR=2.62*(1-(y-.82)/4.35);
+ const r=rand(.28,Math.max(.34,maxR));
+ const a=rand(0,Math.PI*2);
+ const len=rand(.13,.38);
+ const aa=a+rand(-.18,.18);
+ const fillTierIndex = Math.max(0, Math.min(tierPalettes.length - 1,
+   Math.round((4.62 - y) / (4.62 - 1.15) * (tierPalettes.length - 1))));
+ const fillTierPalette = tierPalettes[fillTierIndex];
+ const fillColors = Math.random() > .24 ? fillTierPalette.main : fillTierPalette.accent;
+ const color = fillColors[Math.floor(Math.random() * fillColors.length)];
+ const pts=[
+  [Math.cos(a)*r,y,Math.sin(a)*r],
+  [Math.cos(aa)*(r+len*.35),y+rand(-.04,.08),Math.sin(aa)*(r+len*.35)],
+  [Math.cos(aa+.08)*(r+len),y-rand(.04,.17),Math.sin(aa+.08)*(r+len)]
+ ];
+ brushRibbon(tree,pts,rand(.022,.06),color,{steps:7,ridge:.018,taper:.75});
+}
+
+// A few larger swirling impasto strokes across the foliage.
+for(let i=0;i<95;i++){
+ const y=rand(1.05,4.45);
+ const maxR=2.5*(1-(y-1)/4.2);
+ const r=rand(.4,Math.max(.5,maxR));
+ const a=rand(0,Math.PI*2);
+ const pts=[];
+ for(let j=0;j<5;j++){
+  const t=j/4;
+  const aa=a+t*.38;
+  const rr=r+t*rand(.13,.21);
+  pts.push([Math.cos(aa)*rr,y+Math.sin(t*Math.PI)*.10-t*.08,Math.sin(aa)*rr]);
+ }
+ const swirlTierIndex = Math.max(0, Math.min(tierPalettes.length - 1,
+   Math.round((4.62 - y) / (4.62 - 1.15) * (tierPalettes.length - 1))));
+ const swirlPalette = tierPalettes[swirlTierIndex];
+ const swirlColors = swirlTierIndex % 2 === 1
+   ? [0xe4c5b3,0xd68ca5,0xb4768e,0x8d6c89,0xf0dfb6]
+   : [0x78a98e,0x9cb98e,0xc1bd91,0x477f83,0x6c6380];
+ brushRibbon(tree,pts,rand(.018,.042),swirlColors[i%swirlColors.length],
+  {steps:9,ridge:.018,taper:.9});
+}
+
+// ============================================================
+// Painterly spiral garland with tiny glowing bulbs
+// ============================================================
+function radiusAt(y){
+ const profile=[[.55,2.52],[1.15,2.50],[2.02,2.22],[2.92,1.78],[3.78,1.28],[4.55,.82],[5.0,.35]];
+ for(let i=0;i<profile.length-1;i++){
+  const [y1,r1]=profile[i],[y2,r2]=profile[i+1];
+  if(y>=y1&&y<=y2){const t=(y-y1)/(y2-y1);return r1+(r2-r1)*t;}
+ }
+ return y<.55?2.5:.25;
+}
+function tube(parent,points,r,color,emissive=0x000000,intensity=0){
+ const curve=new THREE.CatmullRomCurve3(points.map(p=>new THREE.Vector3(...p)));
+ const mesh=addMesh(parent,new THREE.TubeGeometry(curve,Math.max(24,points.length*3),r,7,false),
+  material(color,.58,.12,emissive,intensity));
+ return mesh;
+}
+for(let g=0;g<2;g++){
+ const pts=[];
+ for(let i=0;i<=220;i++){
+  const t=i/220,y=.72+t*4.25,a=t*Math.PI*2*(g===0?3.1:2.45)+g*2.1;
+  const r=radiusAt(y)+.055*Math.sin(t*22+g);
+  pts.push([Math.cos(a)*r,y,Math.sin(a)*r]);
+ }
+ tube(tree,pts,.035,C.gold,0x9d641f,.16);
+}
+
+// ============================================================
+// Glowing ornaments: glass baubles, halos and fairy lights.
+// Distributed around all sides so rotation reveals decorations.
+// ============================================================
+function makeGlowTexture(){
+ const c=document.createElement('canvas');c.width=128;c.height=128;
+ const ctx=c.getContext('2d');
+ const g=ctx.createRadialGradient(64,64,2,64,64,62);
+ g.addColorStop(0,'rgba(255,248,210,1)');
+ g.addColorStop(.12,'rgba(255,215,135,.72)');
+ g.addColorStop(.38,'rgba(255,169,83,.25)');
+ g.addColorStop(1,'rgba(255,145,70,0)');
+ ctx.fillStyle=g;ctx.fillRect(0,0,128,128);
+ const tex=new THREE.CanvasTexture(c);tex.colorSpace=THREE.SRGBColorSpace;return tex;
+}
+const glowTexture=makeGlowTexture();
+function glowSprite(parent,x,y,z,size,color=0xffc879,opacity=.9){
+ const sm=new THREE.SpriteMaterial({map:glowTexture,color,transparent:true,opacity,
+  blending:THREE.AdditiveBlending,depthWrite:false});
+ const s=new THREE.Sprite(sm);s.position.set(x,y,z);s.scale.set(size,size,size);parent.add(s);return s;
+}
+const baubleColors=[0xe74f4c,0xf2c45f,0xe58caf,0x7ec5b3,0x9d87c5,0xffdf9a];
+function ornament(x,y,z,r,color,index){
+ const ball=addMesh(tree,new THREE.SphereGeometry(r,18,14),
+  material(color,.28,.18,color,.62),[x,y,z]);
+ // A hand-painted curved highlight on the glass.
+ const hiPts=[[x-r*.35,y+r*.28,z+r*.82],[x-r*.16,y+r*.43,z+r*.9],[x+r*.08,y+r*.38,z+r*.9]];
+ tube(tree,hiPts,Math.max(.009,r*.075),0xfff0c8,0xffe7b0,.45);
+ const cap=addMesh(tree,new THREE.CylinderGeometry(r*.17,r*.23,r*.18,9),
+  material(C.gold,.35,.35),[x,y+r*.93,z]);
+ const loop=addMesh(tree,new THREE.TorusGeometry(r*.18,r*.025,6,12),
+  material(C.goldLight,.4,.25),[x,y+r*1.12,z]);
+ glowSprite(tree,x,y,z+r*.08,r*6.5,color,.52);
+ return ball;
+}
+const bands=[
+ {y:4.18,n:8},{y:3.52,n:11},{y:2.80,n:14},{y:2.04,n:17},{y:1.30,n:20}
+];
+bands.forEach((B,bi)=>{
+ for(let i=0;i<B.n;i++){
+  const a=i/B.n*Math.PI*2+bi*.24;
+  const r=radiusAt(B.y)*rand(.76,.96);
+  const x=Math.cos(a)*r,z=Math.sin(a)*r;
+  const size=bi<2?rand(.07,.105):rand(.085,.135);
+  ornament(x,B.y+rand(-.13,.13),z,size,baubleColors[(i+bi*2)%baubleColors.length],i);
+ }
+});
+
+// Additional larger ornaments visible in the front composition.
+ornament(-1.10,2.80,1.40,.16,0xe34d48,1);
+ornament(.92,3.45,1.05,.145,0xf3c965,2);
+ornament(1.52,1.72,1.45,.17,0xe78ca3,3);
+ornament(-1.66,1.86,1.05,.15,0x81c8b5,4);
+ornament(.10,4.35,.68,.12,0xe8c16b,5);
+
+// Fairy lights with warm emissive bulbs and soft halos.
+const bulbColors=[0xffd36b,0xffedbd,0xf18a69,0x9edac7,0xf2a6a8];
+const bulbs=[];
+for(let i=0;i<118;i++){
+ const t=i/118,y=.82+t*3.95,a=t*Math.PI*2*4.6+.35;
+ const r=radiusAt(y)*.94+.06;
+ const x=Math.cos(a)*r,z=Math.sin(a)*r;
+ const color=bulbColors[i%bulbColors.length];
+ const b=addMesh(tree,new THREE.SphereGeometry(.035+(i%9===0?.012:0),9,7),
+  new THREE.MeshStandardMaterial({color,emissive:color,emissiveIntensity:1.8,
+   roughness:.25,metalness:.04}),[x,y,z]);
+ const halo=glowSprite(tree,x,y,z,.34,color,.68);
+ bulbs.push({b,halo,phase:rand(0,6)});
+}
+
+// ============================================================
+// Classic Santa hat: one continuous curved velvet cap,
+// a thick soft fur cuff, gentle fabric folds and a fluffy pom-pom.
+const hat=new THREE.Group();
+tree.add(hat);
+const hatBaseY=4.98;
+
+// Continuous tapered cap surface with a relaxed sideways droop.
+const hatVertices=[];
+const hatIndices=[];
+const hatSegments=48;
+const hatRings=28;
+for(let iy=0;iy<=hatRings;iy++){
+  const t=iy/hatRings;
+  const y=hatBaseY+1.08*t;
+  const centerX=.34*t+.055*Math.sin(Math.PI*t);
+  const centerZ=.035*Math.sin(Math.PI*t);
+  const radius=.405*Math.pow(1-t,.88)+.004;
+  for(let j=0;j<=hatSegments;j++){
+    const a=j/hatSegments*Math.PI*2;
+    const wobble=1+.018*Math.sin(a*5+t*7);
+    const r=radius*wobble;
+    hatVertices.push(
+      centerX+Math.cos(a)*r,
+      y,
+      centerZ+Math.sin(a)*r
+    );
+    if(iy<hatRings&&j<hatSegments){
+      const k=iy*(hatSegments+1)+j;
+      hatIndices.push(
+        k,k+hatSegments+1,k+1,
+        k+1,k+hatSegments+1,k+hatSegments+2
+      );
+    }
+  }
+}
+const hatGeometry=new THREE.BufferGeometry();
+hatGeometry.setAttribute("position",new THREE.Float32BufferAttribute(hatVertices,3));
+hatGeometry.setIndex(hatIndices);
+hatGeometry.computeVertexNormals();
+const velvetMaterial=new THREE.MeshStandardMaterial({
+  color:0xc83b45,
+  roughness:.88,
+  metalness:0,
+  side:THREE.DoubleSide
+});
+addMesh(hat,hatGeometry,velvetMaterial);
+
+// A little painted shading on the velvet, following the curved fabric.
+for(let i=0;i<9;i++){
+  const a=i/9*Math.PI*2;
+  const pts=[];
+  for(let j=0;j<=8;j++){
+    const t=.08+j*.105;
+    const cx=.34*t+.055*Math.sin(Math.PI*t);
+    const cz=.035*Math.sin(Math.PI*t);
+    const r=.405*Math.pow(1-t,.88)+.008;
+    pts.push([
+      cx+Math.cos(a)*r*1.006,
+      hatBaseY+1.08*t,
+      cz+Math.sin(a)*r*1.006
+    ]);
+  }
+  paintStrokeLine(hat,pts,i%3===0?0xf07870:(i%2?0xa52e39:0xd95a56),.009);
+}
+
+// Thick white fur cuff, with a softly irregular edge.
+addMesh(hat,new THREE.TorusGeometry(.405,.112,14,56),
+  material(0xf2e9d8,.98),[0,hatBaseY,0]);
+for(let i=0;i<48;i++){
+  const a=i/48*Math.PI*2;
+  const rr=.405+rand(-.025,.025);
+  const x=Math.cos(a)*rr;
+  const z=Math.sin(a)*rr;
+  const y=hatBaseY+rand(-.025,.035);
+  addMesh(hat,new THREE.SphereGeometry(rand(.035,.052),8,7),
+    material(i%4===0?0xd8d0c1:0xfff8eb,.99),
+    [x,y,z]);
+}
+
+// Soft fur texture strokes around the cuff.
+for(let i=0;i<26;i++){
+  const a=i/26*Math.PI*2;
+  const rr=.405;
+  const x=Math.cos(a)*rr,z=Math.sin(a)*rr;
+  paintStrokeLine(hat,[
+    [x,hatBaseY-.045,z],
+    [x+Math.cos(a+.22)*.035,hatBaseY+.005,z+Math.sin(a+.22)*.035],
+    [x+Math.cos(a+.42)*.055,hatBaseY+.035,z+Math.sin(a+.42)*.055]
+  ],i%3===0?0xd5cbbb:0xfff9ee,.014);
+}
+
+// Fluffy pom-pom at the drooping tip.
+const pomX=.34+.055*Math.sin(Math.PI);
+const pomY=hatBaseY+1.08;
+const pomZ=.035*Math.sin(Math.PI);
+addMesh(hat,new THREE.SphereGeometry(.17,18,14),
+  material(0xf7f0e3,.99),[pomX,pomY,pomZ]);
+for(let i=0;i<30;i++){
+  const a=rand(0,Math.PI*2);
+  const v=rand(-1,1);
+  const rr=.13*Math.sqrt(1-v*v);
+  const x=pomX+Math.cos(a)*rr;
+  const y=pomY+v*.13;
+  const z=pomZ+Math.sin(a)*rr;
+  addMesh(hat,new THREE.SphereGeometry(rand(.018,.03),7,6),
+    material(i%4===0?0xd8d0c2:0xfffaf0,.99),[x,y,z]);
+}
+// Bow — soft painted loops, highlights and flowing ribbon tails
+// ============================================================
+const bow=new THREE.Group();tree.add(bow);
+const bowZ=2.08,bowY=2.25;
+function bowStroke(points,color,r){
+ tube(bow,points,r,color);
+}
+bowStroke([[0,bowY,bowZ],[ -.28,bowY+.26,bowZ+.08],[-.67,bowY+.30,bowZ+.04],
+ [-.83,bowY+.08,bowZ+.02],[-.55,bowY-.10,bowZ+.10],[-.12,bowY,bowZ+.12]],C.redLight,.075);
+bowStroke([[0,bowY,bowZ],[.28,bowY+.26,bowZ+.08],[.67,bowY+.30,bowZ+.04],
+ [.83,bowY+.08,bowZ+.02],[.55,bowY-.10,bowZ+.10],[.12,bowY,bowZ+.12]],C.redLight,.075);
+bowStroke([[-.08,bowY,bowZ+.12],[-.20,bowY-.30,bowZ+.16],[-.34,bowY-.54,bowZ+.18]],C.red,.06);
+bowStroke([[.08,bowY,bowZ+.12],[.22,bowY-.28,bowZ+.16],[.39,bowY-.50,bowZ+.18]],C.red,.06);
+addMesh(bow,new THREE.SphereGeometry(.14,14,12),material(C.gold,.35,.25),[0,bowY,bowZ+.19]);
+bowStroke([[-.5,bowY+.15,bowZ+.12],[-.35,bowY+.22,bowZ+.14],[-.22,bowY+.15,bowZ+.15]],0xffd6a0,.018);
+
+// ============================================================
+// Christmas Eve interior set dressing — painterly fireplace,
+// arched winter window, wreath, candles, gifts and a painted rug.
+// These elements enrich the room while keeping the tree dominant.
+// ============================================================
+
+const roomProps=new THREE.Group();
+scene.add(roomProps);
+
+// Cabin shell — reduces empty background space and makes the room feel small and warm.
+const cabinShell=new THREE.Group();
+roomProps.add(cabinShell);
+function wallPanel(parent,pos,size,base,strokeA,strokeB){
+  addMesh(parent,new THREE.BoxGeometry(...size),material(base,.98),pos);
+  for(let i=0;i<45;i++){
+    const x=pos[0]+rand(-size[0]*.46,size[0]*.46);
+    const y=pos[1]+rand(-size[1]*.46,size[1]*.46);
+    const z=pos[2]+size[2]*.52;
+    brushRibbon(parent,[
+      [x-rand(.05,.12),y+rand(-.03,.03),z],
+      [x+rand(-.02,.02),y+rand(-.05,.05),z+.01],
+      [x+rand(.06,.12),y+rand(-.03,.03),z]
+    ],rand(.01,.02),i%2?strokeA:strokeB,{steps:4,ridge:.004,taper:.9});
+  }
+}
+// Back wall and side walls close in the composition.
+wallPanel(cabinShell,[0,2.75,-3.45],[13.2,6.4,.26],0x43556b,0x8d775f,0x667a87);
+wallPanel(cabinShell,[-6.05,2.85,.30],[.30,6.2,9.0],0x5c4a45,0xa27d5d,0x78645a);
+wallPanel(cabinShell,[6.05,2.85,.30],[.30,6.2,9.0],0x5a4851,0xb28664,0x77616f);
+// Complete cozy cabin architecture.
+// The front is intentionally left open as a dollhouse cutaway so the
+// Christmas tree and interior remain visible while orbiting the scene.
+
+// Continuous timber baseboards along the side walls.
+paintStrokeLine(cabinShell,[[-5.88,.02,-4.0],[-5.88,.02,-1.0],[-5.88,.02,2.0],[-5.88,.02,4.65]],0x9b7050,.075);
+paintStrokeLine(cabinShell,[[5.88,.02,-4.0],[5.88,.02,-1.0],[5.88,.02,2.0],[5.88,.02,4.65]],0x9b7050,.075);
+
+// Cabin floor boards, running from the front opening to the back wall.
+for(let i=0;i<19;i++){
+  const x=-5.75+i*.64;
+  const wood=[0x765744,0x89644a,0x9b7352,0x6c5144,0xa27a57][i%5];
+  addMesh(cabinShell,new THREE.BoxGeometry(.61,.055,8.9),
+    material(wood,.98),[x,-.585,.25]);
+  for(let j=0;j<4;j++){
+    const z=-3.85+j*2.25+rand(-.16,.16);
+    paintStrokeLine(cabinShell,[
+      [x-.22,-.552,z],[x-.02,-.55,z+.06],[x+.19,-.552,z+.02]
+    ],i%2?0xc49a6b:0x4d3d36,.012);
+  }
+}
+
+// A pitched two-sided roof, with a dark painted underside and warm timber edge.
+// The ridge runs from the back wall toward the open front.
+const roofMaterial=new THREE.MeshStandardMaterial({
+  color:0x55434a,roughness:.98,side:THREE.DoubleSide
+});
+const roofLeft=addMesh(cabinShell,new THREE.BoxGeometry(6.95,.24,9.65),
+  roofMaterial,[-3.18,5.93,.25]);
+roofLeft.rotation.z=.235;
+const roofRight=addMesh(cabinShell,new THREE.BoxGeometry(6.95,.24,9.65),
+  new THREE.MeshStandardMaterial({
+    color:0x60464a,roughness:.98,side:THREE.DoubleSide
+  }),[3.18,5.93,.25]);
+roofRight.rotation.z=-.235;
+
+// Ridge and eave timber trims.
+paintStrokeLine(cabinShell,[[0,6.78,-4.55],[0,6.78,-2],[0,6.78,.5],[0,6.78,4.95]],0x9c704b,.105);
+paintStrokeLine(cabinShell,[[-6.42,5.12,-4.55],[-6.42,5.12,-1],[ -6.42,5.12,2],[ -6.42,5.12,4.95]],0x9b704e,.09);
+paintStrokeLine(cabinShell,[[6.42,5.12,-4.55],[6.42,5.12,-1],[6.42,5.12,2],[6.42,5.12,4.95]],0x9b704e,.09);
+
+// Front gable outline: only sloping braces, no upright posts behind the tree.
+paintStrokeLine(cabinShell,[
+  [-6.35,5.15,4.98],[-4.8,5.52,4.98],[-3.1,5.93,4.98],
+  [-1.5,6.35,4.98],[0,6.76,4.98],
+  [1.5,6.35,4.98],[3.1,5.93,4.98],
+  [4.8,5.52,4.98],[6.35,5.15,4.98]
+],0xb1845b,.09);
+paintStrokeLine(cabinShell,[[-6.35,5.15,4.98],[0,6.76,4.98],[6.35,5.15,4.98]],0x694b3d,.045);
+
+// Painted roof shingles, laid in staggered courses on both slopes.
+for(let side of [-1,1]){
+  for(let row=0;row<5;row++){
+    const xBase=side===-1?-5.65:1.05;
+    for(let col=0;col<9;col++){
+      const x=xBase+col*.57+(row%2)*.16;
+      const y=6.52-Math.abs(x)*.235-row*.018;
+      const z=-3.85+row*1.72;
+      const shingle=addMesh(cabinShell,
+        new THREE.BoxGeometry(.53,.045,1.58),
+        material([0x493e4b,0x65505a,0x765b5d,0x80645a][(row+col)%4],.98),
+        [x,y,z]);
+      shingle.rotation.z=side===-1?.235:-.235;
+      // Small broken ochre/blue oil-brush marks on each shingle.
+      paintStrokeLine(cabinShell,[
+        [x-.17,y+.035,z-.40],[x-.02,y+.04,z-.05],[x+.16,y+.035,z+.34]
+      ],(row+col)%3===0?0xc09a70:0x8a7770,.012);
+    }
+  }
+}
+
+// A warm ceiling glow and two small wall sconces make the cabin feel inhabited.
+const cabinGlow=new THREE.PointLight(0xffc47c,24,13,1.7);
+cabinGlow.position.set(0,5.1,-.3);
+cabinShell.add(cabinGlow);
+for(const x of [-5.78,5.78]){
+  const sconce=new THREE.Group();
+  sconce.position.set(x,4.05,-.4);
+  cabinShell.add(sconce);
+  addMesh(sconce,new THREE.BoxGeometry(.18,.30,.16),
+    material(0x8e664b,.85),[0,0,0]);
+  addMesh(sconce,new THREE.SphereGeometry(.085,10,8),
+    new THREE.MeshBasicMaterial({color:0xffd18a}),[0,-.05,.10]);
+  glowSprite(sconce,0,-.05,.12,.9,0xffbd70,.48);
+}
+
+// The front remains open for viewing; this is a complete cutaway cabin,
+// rather than a closed box that would hide the tree.
+// Open, uncluttered cabin ceiling: no vertical beams behind the tree.
+paintStrokeLine(cabinShell,[[-6.1,5.65,-3.28],[6.1,5.65,-3.28]],0xd5a879,.08);
+paintStrokeLine(cabinShell,[[-6.05,-.1,-3.18],[6.05,-.1,-3.18]],0x654f48,.06);
+
+// A pair of small framed oil-paint panels to enrich the room.
+function smallPainting(x,y,z,w,h,base){
+  const g=new THREE.Group();g.position.set(x,y,z);roomProps.add(g);
+  addMesh(g,new THREE.BoxGeometry(w+.16,h+.16,.08),material(0x8f674c,.75,.1),[0,0,0]);
+  addMesh(g,new THREE.BoxGeometry(w,h,.05),material(base,.95),[0,0,.04]);
+  for(let i=0;i<24;i++){
+    const px=rand(-w*.42,w*.42),py=rand(-h*.38,h*.38);
+    brushRibbon(g,[[px-.05,py,.07],[px,py+rand(-.03,.03),.08],[px+.06,py,.07]],
+      rand(.01,.02), i%3?0x7ba48a:0xf0c48b,{steps:4,ridge:.005,taper:.9});
+  }
+}
+smallPainting(-5.0,3.6,1.45,.95,.78,0x394b63);
+smallPainting(5.0,3.5,1.35,.92,.74,0x4f415f);
+
+// A little stool by the fireplace.
+const stool=new THREE.Group();stool.position.set(-2.9,-.2,2.45);roomProps.add(stool);
+addMesh(stool,new THREE.CylinderGeometry(.38,.44,.11,14),material(0x926845,.88),[0,.38,0]);
+for(const p of [[-.20,.16,-.20],[.20,.16,-.20],[-.20,.16,.20],[.20,.16,.20]]){
+  addMesh(stool,new THREE.CylinderGeometry(.045,.055,.40,8),material(0x6b4c35,.95),p);
+}
+
+
+// Helper: painted block with a few loose impasto marks.
+function paintedBlock(parent,pos,size,color,edgeColor){
+ const obj=addMesh(parent,new THREE.BoxGeometry(...size),
+   material(color,.96),pos);
+ if(edgeColor){
+  const x=pos[0],y=pos[1],z=pos[2];
+  brushRibbon(parent,[
+   [x-size[0]*.43,y+size[1]*.36,z+size[2]*.51],
+   [x-size[0]*.12,y+size[1]*.42,z+size[2]*.52],
+   [x+size[0]*.30,y+size[1]*.34,z+size[2]*.52]
+  ],.018,edgeColor,{steps:7,ridge:.01});
+ }
+ return obj;
+}
+
+// -------------------------
+// Fireplace on the left
+// -------------------------
+const fireplace=new THREE.Group();
+fireplace.position.set(-4.35,0,-1.05);
+roomProps.add(fireplace);
+
+// Soft painted shadow behind the hearth.
+paintedBlock(fireplace,[0,1.48,-.20],[3.0,3.15,.42],0x5a4a4c,0x92705c);
+
+// Stone pillars, built from individually varied painted masonry.
+const stoneColors=[0x9b8068,0xb18c6d,0x786b65,0xc19a70,0x8b786b];
+for(let side of [-1,1]){
+ for(let row=0;row<4;row++){
+  const y=.55+row*.56;
+  const x=side*(1.12+(row%2)*.035);
+  paintedBlock(fireplace,[x,y,.10],[.58,.49,.48],
+   stoneColors[(row+(side===1?2:0))%stoneColors.length],
+   row%2?0xd0ad7e:0x6b5b55);
+ }
+}
+
+// Hearth lintel and thick stone plinth.
+paintedBlock(fireplace,[0,2.84,.12],[2.95,.48,.64],0xb18a68,0xe0b486);
+paintedBlock(fireplace,[0,.27,.18],[3.15,.42,.78],0x7f675a,0xc39a70);
+paintedBlock(fireplace,[0,.50,.18],[2.55,.13,.72],0xc09a73,0xe4c18e);
+
+// Dark firebox, plus a curved painted arch.
+paintedBlock(fireplace,[0,1.56,.12],[2.0,1.95,.12],0x17283b,0x3f4852);
+paintStrokeLine(fireplace,[
+ [-1.02,.65,.205],[-1.05,1.72,.205],[-.82,2.38,.205],
+ [-.40,2.58,.205],[0,2.63,.205],[.42,2.56,.205],
+ [.82,2.34,.205],[1.04,1.72,.205],[1.02,.65,.205]
+],0x4c4142,.075);
+
+// Logs inside the fireplace.
+paintStrokeLine(fireplace,[[-.65,.76,.35],[-.18,.90,.38],[.48,.80,.35]],0x6a402b,.085);
+paintStrokeLine(fireplace,[[-.48,.88,.39],[.12,.75,.40],[.65,.94,.38]],0x9a6038,.055);
+
+// Layered flame ribbons with emissive oil-paint colors.
+const hearthFlames=[];
+const flameSpecs=[
+ {x:-.48,h:.90,c:0xe45d32,w:.16},
+ {x:-.16,h:1.20,c:0xffa13f,w:.19},
+ {x:.17,h:1.02,c:0xffd36c,w:.15},
+ {x:.48,h:.78,c:0xe96b36,w:.14},
+ {x:.02,h:.78,c:0xffe39a,w:.10}
+];
+for(let i=0;i<flameSpecs.length;i++){
+ const f=flameSpecs[i];
+ const flameMat=material(f.c,.5,0,f.c,1.25);
+ const y0=.78;
+ const flame=brushRibbon(fireplace,[
+  [f.x-.10,y0,.43],
+  [f.x-.13,y0+f.h*.35,.44],
+  [f.x+.07,y0+f.h*.70,.45],
+  [f.x+.015,y0+f.h,.46]
+ ],f.w,f.c,{steps:12,ridge:.035,taper:.48,emissive:f.c,emissiveIntensity:1.25});
+ flame.material=flameMat;
+ hearthFlames.push({mesh:flame,base:f.h,phase:rand(0,7),mat:flameMat});
+}
+
+// Mantel shelf and decorative brush edging.
+paintedBlock(fireplace,[0,3.12,.23],[3.35,.20,.88],0x684b42,0xd5a875);
+paintStrokeLine(fireplace,[[-1.58,3.17,.70],[-.8,3.20,.71],[0,3.16,.71],[.8,3.20,.71],[1.58,3.17,.70]],0xf0c58a,.025);
+
+// Mantel garland: leafy painted strokes and warm berries.
+const mantelGarland=new THREE.Group();
+fireplace.add(mantelGarland);
+for(let i=0;i<31;i++){
+ const t=i/30;
+ const x=-1.52+t*3.04;
+ const y=3.02-.28*Math.sin(t*Math.PI);
+ const z=.73;
+ brushRibbon(mantelGarland,[
+  [x-.12,y+.04,z],[x,y-.015,z+.025],[x+.13,y-.07,z]
+ ],rand(.035,.065),[0x164d42,0x24745a,0x4a8a65][i%3],
+ {steps:6,ridge:.018,taper:.8});
+ if(i%5===0){
+  addMesh(mantelGarland,new THREE.SphereGeometry(.055,8,7),
+   material(i%2?0xc9413e:0xd7a64f,.45,.05,0x9d3c20,.18),
+   [x,y-.10,z+.04]);
+ }
+}
+
+// Candles on the mantel.
+function makeCandle(parent,x,y,z,height,color){
+ const g=new THREE.Group();g.position.set(x,y,z);parent.add(g);
+ addMesh(g,new THREE.CylinderGeometry(.095,.11,height,12),
+  material(color,.88),[0,height/2,0]);
+ // melted wax rim
+ addMesh(g,new THREE.TorusGeometry(.09,.018,6,16),
+  material(0xf6dfb5,.9),[0,height*.91,0]);
+ paintStrokeLine(g,[[0,height*.92,0],[.015,height*1.02,0]],0x3d3027,.012);
+ const flame=addMesh(g,new THREE.SphereGeometry(.055,10,8),
+  new THREE.MeshBasicMaterial({color:0xffc66c}),[0,height*1.12,0]);
+ glowSprite(g,0,height*1.12,0,.85,0xffbd61,.72);
+ return g;
+}
+makeCandle(fireplace,-1.10,3.23,.78,.38,0xf0dfbd);
+makeCandle(fireplace,1.12,3.23,.78,.48,0xd8c7a7);
+
+// Stockings hanging from the mantel.
+function makeStocking(parent,x,y,z,color,flip=1){
+ const g=new THREE.Group();g.position.set(x,y,z);g.scale.x=flip;parent.add(g);
+ const sockMat=material(color,.92);
+ // Soft stocking silhouette assembled from rounded painted shapes.
+ addMesh(g,new THREE.CapsuleGeometry(.105,.43,5,9),sockMat,[0,-.28,0]);
+ addMesh(g,new THREE.SphereGeometry(.15,10,8),sockMat,[.105,-.52,0]);
+ addMesh(g,new THREE.BoxGeometry(.24,.12,.16),material(0xf0e4cf,.98),[0,.015,.01]);
+ brushRibbon(g,[[.02,-.16,.11],[.05,-.34,.13],[.16,-.48,.12]],.018,0xf1c9a5,{steps:6,ridge:.01});
+}
+makeStocking(fireplace,-.67,2.98,.76,0xb63e45,1);
+makeStocking(fireplace,.67,2.98,.76,0x286c68,-1);
+
+// A painterly wreath above the mantel.
+const wreath=new THREE.Group();
+wreath.position.set(0,4.05,.02);
+fireplace.add(wreath);
+addMesh(wreath,new THREE.TorusGeometry(.48,.055,8,48),
+ material(0x174f42,.95),[0,0,0]);
+for(let i=0;i<42;i++){
+ const a=i/42*Math.PI*2;
+ const x=Math.cos(a)*.48,y=Math.sin(a)*.48;
+ brushRibbon(wreath,[
+  [x*.82,y*.82,.04],
+  [x+Math.cos(a+.55)*.13,y+Math.sin(a+.55)*.13,.08],
+  [x+Math.cos(a+.95)*.22,y+Math.sin(a+.95)*.22,.06]
+ ],rand(.025,.055),[0x1a604b,0x32815e,0x72966d][i%3],
+ {steps:6,ridge:.015,taper:.8});
+ if(i%7===0){
+  addMesh(wreath,new THREE.SphereGeometry(.055,8,7),
+   material(0xc83f43,.45,.05,0x8d2020,.15),[x*1.08,y*1.08,.10]);
+ }
+}
+paintStrokeLine(wreath,[[-.22,-.55,.12],[0,-.72,.14],[.22,-.55,.12]],0xc74743,.045);
+
+// -------------------------
+// Arched window on the right: painted night beyond,
+// with thick wooden frame and soft curtains.
+// -------------------------
+const windowGroup=new THREE.Group();
+windowGroup.position.set(4.35,3.05,-2.05);
+roomProps.add(windowGroup);
+
+// Window glass: deep blue, with a painted arch silhouette.
+addMesh(windowGroup,new THREE.BoxGeometry(2.75,3.55,.12),
+ material(0x172b50,.7),[0,0,0]);
+// Warm inner border and wooden frame.
+for(const x of [-1.48,1.48]){
+ paintedBlock(windowGroup,[x,0,.13],[.20,3.85,.32],0x795343,0xc08b5e);
+}
+paintedBlock(windowGroup,[0,1.90,.13],[3.15,.22,.32],0x795343,0xc08b5e);
+paintedBlock(windowGroup,[0,-1.90,.13],[3.15,.22,.32],0x795343,0xc08b5e);
+paintedBlock(windowGroup,[0,0,.18],[.14,3.65,.18],0x93684d,0xd3a06a);
+paintedBlock(windowGroup,[0,0,.18],[2.85,.14,.18],0x93684d,0xd3a06a);
+
+// Painted window sky swirls and little stars.
+for(let i=0;i<7;i++){
+ const y=-1.35+i*.43;
+ const pts=[];
+ for(let j=0;j<=18;j++){
+  const t=j/18;
+  pts.push([-1.25+t*2.5,y+.10*Math.sin(t*Math.PI*2+i*.7),.115]);
+ }
+ paintStrokeLine(windowGroup,pts,i%2?0x6b91b0:0xb1a77e,.018);
+}
+for(let i=0;i<13;i++){
+ const x=rand(-1.22,1.22),y=rand(-1.45,1.45);
+ addMesh(windowGroup,new THREE.SphereGeometry(.025,6,5),
+  new THREE.MeshBasicMaterial({color:i%3?0xd7d5b6:0xf1cf79}),[x,y,.16]);
+}
+// Curtain folds as broad, soft painted strokes.
+for(let side of [-1,1]){
+ for(let i=0;i<5;i++){
+  const x=side*(1.55+i*.07);
+  brushRibbon(windowGroup,[
+   [x,1.72,.25],[x-side*.10,.65,.27],[x+side*.05,-.45,.27],
+   [x+side*.20,-1.75,.25]
+  ],.055,i%2?0x7c4c56:0x9d6261,{steps:10,ridge:.025,taper:.85});
+ }
+}
+
+// -------------------------
+// Rug under the tree: warm, painterly circular textile.
+// -------------------------
+const rug=new THREE.Group();rug.position.set(0,-.565,.15);scene.add(rug);
+const rugMat=material(0x773e48,.98);
+const rugDisc=addMesh(rug,new THREE.CircleGeometry(3.65,80),rugMat,[0,0,0]);
+rugDisc.rotation.x=-Math.PI/2;
+rugDisc.scale.set(1.12,.72,1);
+for(let ring=0;ring<3;ring++){
+ const pts=[];
+ for(let i=0;i<=100;i++){
+  const a=i/100*Math.PI*2;
+  const r=3.38-ring*.16;
+  pts.push([Math.cos(a)*r,0.012+ring*.002,Math.sin(a)*r*.72]);
+ }
+ paintStrokeLine(rug,pts,ring===1?0xd7a45f:0xe1c28a,.025);
+}
+for(let i=0;i<65;i++){
+ const a=i/65*Math.PI*2;
+ const r=rand(2.9,3.45);
+ brushRibbon(rug,[
+  [Math.cos(a)*r,.02,Math.sin(a)*r*.72],
+  [Math.cos(a+.08)*(r+.12),.025,Math.sin(a+.08)*(r+.12)*.72]
+ ],.018,i%2?0xd6ad78:0x9b6b63,{steps:5,ridge:.008});
+}
+
+// -------------------------
+// Wrapped gifts around the foot of the tree.
+// -------------------------
+function giftBox(x,z,w,h,d,paper,ribbonColor,tilt=0){
+ const g=new THREE.Group();g.position.set(x,-.34,z);g.rotation.y=tilt;roomProps.add(g);
+ addMesh(g,new THREE.BoxGeometry(w,h,d),material(paper,.84),[0,h/2,0]);
+ // Crossed ribbon bands
+ paintedBlock(g,[0,h/2,d/2+.012],[w*.13,h+.025,.035],ribbonColor,0xf3dba4);
+ paintedBlock(g,[0,h+.012,0],[w+.025,.035,d*.13],ribbonColor,0xf3dba4);
+ // Painted bow loops
+ paintStrokeLine(g,[[-.08,h+.04,0],[ -.25,h+.18,.02],[-.32,h+.12,.02],[-.08,h+.04,0]],ribbonColor,.025);
+ paintStrokeLine(g,[[.08,h+.04,0],[.25,h+.18,.02],[.32,h+.12,.02],[.08,h+.04,0]],ribbonColor,.025);
+ // Impasto flecks on wrapping paper
+ for(let i=0;i<9;i++){
+  const px=rand(-w*.42,w*.42),py=rand(.08,h*.9);
+  brushRibbon(g,[[px,py,d/2+.02],[px+.07,py+.025,d/2+.025]],
+   .012,i%2?0xf0d8ac:0xe5b47d,{steps:4,ridge:.006});
+ }
+}
+giftBox(-1.95,1.05,.82,.60,.72,0x9c3f48,0xe6c36e,-.12);
+giftBox(1.88,1.10,.92,.48,.76,0x285f61,0xe4c27a,.14);
+giftBox(-1.35,1.92,.62,.82,.58,0xb77a48,0xefe0bd,.08);
+giftBox(1.38,2.02,.70,.62,.62,0x6b5278,0xe4c16e,-.10);
+
+// Little candle lanterns near the rug edges.
+function floorLantern(x,z){
+ const g=new THREE.Group();g.position.set(x,-.55,z);roomProps.add(g);
+ addMesh(g,new THREE.BoxGeometry(.42,.55,.42),material(0x73513f,.85),[0,.28,0]);
+ addMesh(g,new THREE.BoxGeometry(.31,.43,.31),
+  new THREE.MeshBasicMaterial({color:0xffc76c,transparent:true,opacity:.24}),[0,.29,0]);
+ for(const y of [.04,.53]){
+  addMesh(g,new THREE.BoxGeometry(.48,.055,.48),material(0xb78a54,.65,.15),[0,y,0]);
+ }
+ glowSprite(g,0,.30,0,1.35,0xffb65d,.45);
+}
+floorLantern(-2.85,1.55);
+floorLantern(2.85,1.40);
+
+// Painterly wall garland draped high across the back of the room.
+for(let i=0;i<36;i++){
+ const t=i/35,x=-6+t*12;
+ const y=5.85-.72*Math.sin(t*Math.PI);
+ const z=-3.2;
+ brushRibbon(roomProps,[
+  [x-.12,y+.08,z],[x,y,z+.025],[x+.12,y-.06,z]
+ ],.035,[0x1c5948,0x2e8060,0x678d67][i%3],
+ {steps:6,ridge:.014,taper:.85});
+ if(i%6===0){
+  addMesh(roomProps,new THREE.SphereGeometry(.055,8,7),
+   material(i%2?0xc54443:0xe2b75c,.5,.05,0x8d4c20,.12),
+   [x,y-.07,z+.04]);
+ }
+}
+
+// ============================================================
+// Warm firelight flicker, fire embers and floating golden dust
+// ============================================================
+const emberGroup=new THREE.Group();scene.add(emberGroup);
+const embers=[];
+for(let i=0;i<45;i++){
+ const x=rand(-4.8,-2.2),y=rand(.4,3.2),z=rand(1.2,3.8);
+ const color=i%3===0?0xffe4a0:0xff9a4d;
+ const m=addMesh(emberGroup,new THREE.SphereGeometry(rand(.012,.035),6,5),
+  new THREE.MeshBasicMaterial({color}),[x,y,z]);
+ embers.push({m,speed:rand(.004,.014),phase:rand(0,8)});
+}
+
+// Soft amber glow around the fireplace direction.
+glowSprite(scene,-4.2,2.0,2.8,5.4,0xff9c4b,.38);
+glowSprite(scene,-3.8,1.1,2.5,3.2,0xffc06b,.28);
+
+// ============================================================
+// Gentle snowfall and animation
+// ============================================================
+const snow=[];
+for(let i=0;i<120;i++){
+ const m=addMesh(scene,new THREE.SphereGeometry(rand(.012,.028),6,5),
+  new THREE.MeshBasicMaterial({color:i%4===0?0xffe1a0:0xe6e9df}),
+  [rand(-8,8),rand(0,9),rand(-7,7)]);
+ snow.push({m,speed:rand(.003,.012),phase:rand(0,6)});
+}
+
+const clock=new THREE.Clock();
+function animate(){
+ requestAnimationFrame(animate);
+ const t=clock.getElapsedTime();
+ controls.update();
+
+ // Firelight breathes gently across the foliage.
+ hearthLight.intensity=72+Math.sin(t*3.1)*7+Math.sin(t*7.4)*3;
+ warmBounce.intensity=35+Math.sin(t*2.2+1)*4;
+ softGold.intensity=17+Math.sin(t*1.7)*2;
+ hearthFlames.forEach(({mesh,base,phase,mat},i)=>{
+  const flicker=1+.10*Math.sin(t*5.2+phase)+.055*Math.sin(t*9.1+i);
+  mesh.scale.y=flicker;
+  mat.emissiveIntensity=1.0+.38*Math.sin(t*6+phase);
+ });
+
+ bulbs.forEach(({b,halo,phase},i)=>{
+  const pulse=.72+.28*(.5+.5*Math.sin(t*2.6+phase));
+  b.material.emissiveIntensity=1.05+pulse*1.15;
+  halo.material.opacity=.35+pulse*.45;
+  const s=.30+pulse*.08;halo.scale.set(s,s,s);
+ });
+ embers.forEach(({m,speed,phase})=>{
+  m.position.y+=speed;
+  m.position.x+=Math.sin(t+phase)*.002;
+  if(m.position.y>4.2){m.position.y=.35;m.position.x=rand(-4.8,-2.2);}
+ });
+ snow.forEach(({m,speed,phase})=>{
+  m.position.y-=speed;
+  m.position.x+=Math.sin(t+phase)*.0015;
+  if(m.position.y<-.4){m.position.y=9;m.position.x=rand(-8,8);}
+ });
+
+ renderer.render(scene,camera);
+}
+animate();
+
+window.addEventListener('resize',()=>{
+ camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();
+ renderer.setSize(innerWidth,innerHeight);
+});
+</script>
+</body>
+</html>

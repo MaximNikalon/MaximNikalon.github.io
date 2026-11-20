@@ -1,0 +1,1085 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#162c29">
+<title>ENHYPEN · 冬夜庭院</title>
+<style>
+  :root { color-scheme: dark; font-family: system-ui, sans-serif; background: #162c29; color: #f1e2c3; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100svh; display: grid; place-items: center; }
+  main { width: 100%; }
+  .stage { position: relative; overflow: hidden; height: 100svh; min-height: 420px; isolation: isolate; background: #263e34; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  #snow { pointer-events: none; }
+  .controls { position: absolute; right: max(24px, env(safe-area-inset-right)); bottom: max(22px, env(safe-area-inset-bottom)); display: flex; gap: 8px; }
+  button { font: inherit; font-size: 12px; letter-spacing: .09em; color: #ffedcf; background: #172b25ed; min-height: 42px; padding: 0 15px; border: 1px solid #dfc89166; border-radius: 100px; cursor: pointer; }
+  button[aria-pressed="true"] { color: #263328; background: #efe0b9; border-color: #efe0b9; }
+  button:focus-visible { outline: 2px solid #fff0ca; outline-offset: 3px; }
+  @media (max-aspect-ratio: 5/4) {
+    .stage { height: auto; min-height: 0; aspect-ratio: 7 / 8; }
+    canvas { object-position: 43% center; }
+    .controls { right: 12px; bottom: 12px; }
+    button { min-height: 39px; padding-inline: 12px; }
+  }
+  #orbit-view, .orbit-ui, .view-hint { display: none; }
+  .stage.is-3d {
+    height: 100svh;
+    min-height: 420px;
+    aspect-ratio: auto;
+    background: radial-gradient(ellipse at 41% 48%, #59634a 0%, #3e4e3f 43%, #213831 77%, #182e2a 100%);
+  }
+  .stage.is-3d[data-lamps="off"] { background: radial-gradient(ellipse at 46% 40%, #40574c, #203a35 69%, #172f2a); }
+  .is-3d #scene { display: none; }
+  .is-3d #orbit-view { display: block; object-fit: fill; cursor: grab; touch-action: none; }
+  .is-3d #orbit-view.dragging { cursor: grabbing; }
+  .is-3d #orbit-view:focus-visible { outline: 2px solid #f7e6be; outline-offset: -4px; }
+  .is-3d #snow { object-fit: fill; }
+  .is-3d .orbit-ui { display: inline-block; }
+  .is-3d .view-hint {
+    display: block; position: absolute; left: 24px; bottom: 22px; margin: 0;
+    color: #ebdec2; font-size: 12px; letter-spacing: .07em; pointer-events: none;
+  }
+  @media (max-width: 640px) {
+    .is-3d .controls { left: 12px; justify-content: center; flex-wrap: wrap; }
+    .is-3d .view-hint { left: 0; right: 0; bottom: 63px; text-align: center; }
+  }
+</style>
+</head>
+<body>
+<main aria-label="ENHYPEN 冬夜庭院">
+  <div class="stage">
+    <canvas id="scene" width="1360" height="860" role="img" aria-label="暖灯庭院里的两棵粘土圣诞树，左高右低，竖直的内侧相对。树身由深浅绿色层叠组成，左树中上段镂空中悬着雪花，右树中段镂空，上方是竖排 ENHYPEN。"></canvas>
+    <canvas id="orbit-view" tabindex="0" role="img" aria-label="可以旋转的 ENHYPEN 粘土圣诞庭院。拖动或按方向键调整视角，按 Home 回到正面。"></canvas>
+    <canvas id="snow" width="1360" height="860" aria-hidden="true"></canvas>
+    <p class="view-hint">拖动旋转 · 滚轮缩放</p>
+    <div class="controls">
+      <button id="spin-switch" class="orbit-ui" type="button" aria-pressed="false">自动旋转</button>
+      <button id="reset-view" class="orbit-ui" type="button">回到正面</button>
+      <button id="lamp-switch" type="button" aria-pressed="true">暖灯</button>
+      <button id="snow-switch" type="button" aria-pressed="true">飘雪</button>
+    </div>
+  </div>
+</main>
+<script>
+'use strict';
+
+function startCourtyard2D() {
+const scene = document.querySelector('#scene');
+const ctx = scene.getContext('2d', { alpha: false });
+const snow = document.querySelector('#snow');
+const flakes = snow.getContext('2d');
+const lampSwitch = document.querySelector('#lamp-switch');
+const snowSwitch = document.querySelector('#snow-switch');
+const quietMotion = matchMedia('(prefers-reduced-motion: reduce)');
+const W = scene.width, H = scene.height;
+let lampsOn = true;
+let snowOn = !quietMotion.matches;
+let seed = 0;
+
+function random() {
+  seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+  return seed / 4294967296;
+}
+
+function tint(x1, y1, x2, y2, ...colors) {
+  const gradient = ctx.createLinearGradient(x1, y1, x2, y2);
+  colors.forEach((color, index) => gradient.addColorStop(index / (colors.length - 1), color));
+  return gradient;
+}
+
+function shape(path, color, stroke, width = 1) {
+  const outline = path instanceof Path2D ? path : new Path2D(path);
+  ctx.fillStyle = color;
+  ctx.fill(outline);
+  if (stroke) {
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = width;
+    ctx.stroke(outline);
+  }
+}
+
+function oval(x, y, rx, ry, color, angle = 0) {
+  ctx.beginPath();
+  ctx.ellipse(x, y, rx, ry, angle, 0, Math.PI * 2);
+  ctx.fillStyle = color;
+  ctx.fill();
+}
+
+function stroke(path, color, width) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.stroke(new Path2D(path));
+}
+
+function glow(x, y, radius, inner, outer) {
+  const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
+  gradient.addColorStop(0, inner);
+  gradient.addColorStop(1, outer);
+  ctx.fillStyle = gradient;
+  ctx.fillRect(x - radius, y - radius, radius * 2, radius * 2);
+}
+
+function sky() {
+  ctx.fillStyle = tint(0, 0, 0, 665, '#142925', '#30483d', '#879073');
+  ctx.fillRect(0, 0, W, H);
+  glow(383, 331, 500, '#d2b17655', '#d2b17600');
+  glow(1111, 317, 370, '#d3b27d32', '#d3b27d00');
+
+  for (let i = 0; i < 105; i++) {
+    const x = random() * W, y = 15 + random() * 402;
+    const radius = .5 + random() * 1.15;
+    oval(x, y, radius, radius, i % 4 ? '#efe5c440' : '#ffe3a878');
+  }
+
+  // Soft silhouettes behind the courtyard wall.
+  for (let i = 0; i < 35; i++) {
+    const x = i * 43 + random() * 25 - 35;
+    const y = 241 + random() * 135 + (Math.abs(x - 680) < 260 ? 28 : 0);
+    const spread = 33 + random() * 39;
+    const base = 560 + random() * 35;
+    shape(`M${x} ${y} Q${x + 14} ${y + 40} ${x + spread * .53} ${y + 76}
+      L${x + spread * .32} ${y + 73} Q${x + spread * .61} ${y + 122} ${x + spread * .78} ${y + 141}
+      L${x + spread * .5} ${y + 140} Q${x + spread * .77} ${base - 24} ${x + spread} ${base}
+      H${x - spread} Q${x - spread * .64} ${base - 49} ${x - spread * .5} ${y + 140}
+      L${x - spread * .74} ${y + 145} Q${x - spread * .43} ${y + 103} ${x - spread * .31} ${y + 76}
+      L${x - spread * .49} ${y + 78} Q${x - 12} ${y + 39} ${x} ${y}Z`,
+      ['#536651', '#596c55', '#4d6251', '#61735d'][i % 4]);
+  }
+}
+
+function wall() {
+  shape('M0 507 Q221 478 406 516 Q663 542 892 511 Q1115 476 1360 497 V649 H0Z',
+    tint(0, 490, 0, 641, '#797666', '#595d4e', '#414d42'));
+  ctx.save();
+  ctx.clip(new Path2D('M0 507 Q221 478 406 516 Q663 542 892 511 Q1115 476 1360 497 V649 H0Z'));
+  for (let row = 0; row < 4; row++) {
+    let x = -77 + row % 2 * 34;
+    while (x < W) {
+      const w = 40 + 33 * random();
+      const y = 496 + row * 30 + 8 * Math.sin(x / 72) + random() * 5;
+      shape(`M${x + 1} ${y + 7} q0 -7 7 -7 h${w - 16} q7 0 8 7 v11 q-1 6 -8 7 h-${w - 16} q-6 0 -7 -6Z`,
+        ['#9d907332', '#252e2460', '#b3a17b24', '#746f585a'][Math.floor(random() * 4)]);
+      x += w + 4;
+    }
+  }
+  ctx.restore();
+  stroke('M0 506 Q219 477 406 512 Q656 538 894 508 Q1120 474 1360 496', '#ddd7b9', 9);
+  stroke('M0 501 Q219 472 406 507 Q656 533 894 503 Q1120 469 1360 491', '#ece2c7', 5);
+}
+
+function windowpane(x, y, w, h) {
+  shape(`M${x} ${y + h} v-${h - 16} q0 -16 16 -16 h${w - 32} q16 0 16 16 v${h - 16}Z`, '#352e23', '#735644', 8);
+  const fill = lampsOn ? tint(x, y, x, y + h, '#f6d28a', '#e9a14c', '#a95e2d') : '#51564a';
+  shape(`M${x + 6} ${y + h - 5} v-${h - 21} q0 -11 11 -11 h${w - 34} q11 0 11 11 v${h - 21}Z`, fill);
+  stroke(`M${x + w / 2} ${y + 5} v${h - 9} M${x + 4} ${y + h * .49} h${w - 8}`, '#6b5038', 5);
+  stroke(`M${x - 9} ${y + h + 2} h${w + 18}`, '#845e43', 9);
+  stroke(`M${x - 7} ${y + h - 1} h${w + 13}`, '#e7dbc0', 4);
+  if (lampsOn) glow(x + w / 2, y + h * .48, w * 1.48, '#ffbd5f38', '#ffbd5f00');
+}
+
+function cabin() {
+  oval(205, 649, 205, 31, '#263a2e78');
+  shape('M66 438 L211 326 L361 432 V614 Q246 643 73 612Z', tint(70, 403, 357, 610, '#8b7151', '#684c35', '#443b2e'));
+  shape('M210 344 L363 425 L407 449 L401 606 L361 618 V431Z', tint(353, 427, 410, 596, '#554535', '#38382d'));
+  ctx.save();
+  ctx.clip(new Path2D('M66 438 L211 326 L361 432 V614 Q246 643 73 612Z'));
+  for (let y = 440; y < 620; y += 17) {
+    stroke(`M68 ${y} Q205 ${y + 6} 359 ${y - 2}`, '#40332570', 2);
+    stroke(`M71 ${y - 3} Q203 ${y + 2} 358 ${y - 5}`, '#c1a17e36', 1.8);
+  }
+  ctx.restore();
+  shape('M292 300 Q310 292 330 300 L331 381 L295 359Z', tint(293, 300, 332, 362, '#8d6a50', '#574738'));
+  stroke('M290 301 Q311 294 332 300', '#eee1c4', 9);
+  shape('M44 438 Q118 371 192 308 Q209 292 226 304 L389 423 Q399 431 394 442 Q388 449 380 446 L209 337 Q126 398 65 456 Q50 462 44 454Z',
+    tint(49, 326, 170, 465, '#6f5d41', '#5c4836', '#382f24'));
+  shape('M40 428 Q106 371 189 301 Q207 285 226 296 L389 416 Q406 431 392 434 Q378 437 366 426 L224 326 Q207 316 194 332 Q113 399 64 444 Q44 455 37 443 Q34 436 40 428Z',
+    tint(114, 331, 170, 431, '#f4e8ca', '#d9d1b3', '#a2a990'));
+  stroke('M61 431 Q126 377 190 321 Q208 303 225 313', '#f9efd574', 3.5);
+  windowpane(178, 368, 61, 47);
+  windowpane(94, 467, 80, 82);
+  windowpane(264, 462, 68, 84);
+  shape('M188 610 V508 Q189 479 216 479 Q246 479 249 508 V614Z', tint(191, 488, 249, 611, '#574634', '#382d23'), '#9d7a56', 5);
+  stroke('M205 494 V603 M228 488 V605', '#ab826045', 2);
+  oval(234, 556, 3, 3, '#dfae5c');
+  shape('M175 616 Q223 610 264 615 L273 633 Q222 639 173 630Z', tint(175, 615, 176, 636, '#c7c1a4', '#807e69'));
+}
+
+function ground() {
+  shape('M0 608 Q151 565 318 602 Q478 622 633 606 Q870 561 1013 588 Q1166 561 1360 600 V860 H0Z',
+    tint(0, 590, 0, 860, '#c1bf9d', '#a4ae94', '#788d78'));
+  shape('M218 611 C279 635 290 663 398 679 C536 701 644 743 735 860 H333 C314 763 251 709 204 676 C184 657 181 636 207 611Z',
+    tint(309, 608, 503, 855, '#c9b38b', '#b6ad8f', '#989b82'));
+  stroke('M218 616 C276 642 286 664 398 685 C526 709 636 751 717 857', '#ede7c350', 4);
+  shape('M0 721 Q101 683 184 704 Q239 716 285 752 Q150 740 0 799Z', '#d7d6b65c');
+  shape('M923 708 Q1089 638 1232 687 Q1317 713 1360 696 V806 Q1151 726 923 708Z', '#e8dfba4a');
+
+  for (let i = 0; i < 1300; i++) {
+    const x = random() * W, y = 607 + random() * 254, size = .25 + random() * 1.9;
+    oval(x, y, size, size * .42, i % 3 ? '#faf0c42d' : '#394f3d26');
+  }
+  for (let i = 0; i < 14; i++) {
+    const step = i / 14;
+    const y = 635 + step * step * 220;
+    const x = 222 + (y - 635) * 1.52 + random() * (40 + step * 116);
+    const w = 7 + step * 26 + random() * 8;
+    shape(`M${x - w} ${y} q${w * .6} -8 ${w * 1.35} -7 q${w * .7} 1 ${w * .65} 5 q2 4 -4 6 q-${w} 5 -${w * 1.75} 1Z`, '#716e5958');
+    stroke(`M${x - w + 3} ${y - 2} q${w} -7 ${w * 1.7} -3`, '#fff1c656', 1.5);
+  }
+}
+
+function lantern(x, y, scale) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(scale, scale);
+  if (lampsOn) {
+    glow(0, -106, 114, '#ffcb745b', '#ffcb7400');
+    oval(6, 4, 62, 15, '#f7cb6b39');
+  }
+  oval(16, 5, 33, 7, '#263d30a1');
+  stroke('M0 0 V-79', '#303f34', 10);
+  stroke('M-2 -7 V-70', '#8b8969', 2);
+  shape('M-17 -124 Q0 -141 17 -124 L14 -118 H-14Z', tint(-15, -135, 15, -118, '#79775a', '#303c31'));
+  shape('M-14 -118 H14 L9 -88 H-9Z', lampsOn ? tint(-8, -118, 10, -88, '#fff3b8', '#de963e') : '#66715a', '#394437', 4);
+  stroke('M0 -116 V-89 M-11 -87 H11', '#465041', 3);
+  if (lampsOn) glow(0, -105, 32, '#ffdf904a', '#ffdf9000');
+  ctx.restore();
+}
+
+function urn(x, y, scale) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(scale, scale);
+  oval(9, 2, 41, 11, '#344c3db0');
+  shape('M-31 -35 H31 L23 -5 Q0 6 -23 -5Z', tint(-29, -30, 30, -5, '#92754e', '#74543a', '#4c4230'));
+  oval(0, -35, 33, 7, '#a3845d');
+  oval(0, -36, 27, 5, '#514b34');
+  for (let i = 0; i < 12; i++) {
+    const tip = -36 + random() * 72, high = -43 - random() * 49;
+    stroke(`M0 -36 Q${tip * .46} ${high + 14} ${tip} ${high}`, '#58694b', 2);
+    oval(tip * .76, high + 6, 13, 4.5, i % 3 ? '#688258' : '#8b9b66', tip > 0 ? -.38 : .4);
+  }
+  ctx.restore();
+}
+
+const palettes = [
+  ['#a6b96d','#698c52','#366749','#234a39'],
+  ['#89ad66','#568754','#326d50','#204f41'],
+  ['#70a477','#4f8961','#2b6853','#214d42'],
+  ['#a9bb73','#789755','#487b52','#2c5845'],
+  ['#8aad6e','#5e925f','#3d795d','#235344']
+];
+
+const leftTop = [
+  [145, 218, 48, 0], [181, 249, 73, 1], [213, 279, 101, 2], [245, 318, 128, 0], [280, 350, 147, 1]
+];
+const leftBottom = [
+  [400, 456, 150, 4], [415, 501, 169, 2], [462, 548, 211, 0],
+  [503, 599, 232, 1], [543, 644, 248, 2], [590, 680, 250, 3]
+];
+const rightTop = [
+  [313, 371, 48, 4], [340, 405, 73, 2], [371, 445, 108, 0], [408, 480, 127, 1]
+];
+const rightBottom = [
+  [525, 570, 132, 2], [545, 610, 167, 0], [576, 654, 191, 4], [610, 677, 199, 1]
+];
+
+function branch(edge, direction, tier) {
+  const [top, bottom, width, palette] = tier;
+  const h = bottom - top;
+  const round = Math.min(12, width * .2);
+  const side = new Path2D(`M0 ${top + 13}
+    C${round * .49} ${top - 2} ${width * .39} ${top - 2} ${width * .53} ${top + h * .32}
+    C${width * .68} ${top + h * .64} ${width * 1.02} ${bottom - 25} ${width} ${bottom - 14}
+    C${width * .997} ${bottom - 3} ${width * .88} ${bottom + 4} ${width * .77} ${bottom - 1}
+    Q${width * .65} ${bottom + 12} ${width * .55} ${bottom + 5}
+    Q${width * .44} ${bottom + 17} ${width * .32} ${bottom + 8}
+    Q${width * .22} ${bottom + 16} ${width * .12} ${bottom + 7}
+    Q0 ${bottom + 10} 0 ${bottom - 3}Z`);
+  ctx.save();
+  ctx.translate(edge, 0);
+  ctx.scale(direction, 1);
+  ctx.save();
+  ctx.translate(-direction * 7, 5);
+  shape(side, '#243e34', '#293d32', 2);
+  ctx.restore();
+
+  const [light, green, mid, dark] = palettes[palette];
+  shape(side, tint(width * .33, top + 1, width * .68, bottom + 12, light, green, mid, dark));
+  ctx.save();
+  ctx.clip(side);
+  glow(width * .35, top + h * .64, width * .64, '#e2d89729', '#e2d89700');
+
+  // Scored grooves and tiny impressions are painted once into each clay tier.
+  for (let j = 1; j <= 9; j++) {
+    const fraction = j / 10;
+    const x = width * fraction;
+    const y = bottom + 11 - 20 * fraction;
+    stroke(`M${x * .4} ${top + h * .24} Q${x * .54} ${bottom - h * .26} ${x} ${y}`, '#1a46364c', 2.4);
+    stroke(`M${x * .4 + 2} ${top + h * .29} Q${x * .54 + 3} ${bottom - h * .25} ${x + 3} ${y - 2}`, '#d1d99438', 1.35);
+  }
+  for (let j = 0; j < Math.ceil(width * 2.5); j++) {
+    const x = random() * width, y = top + random() * (h + 11);
+    const radius = .35 + random() * 1.05;
+    oval(x, y, radius, radius * .64, j % 3 ? '#eaf1aa28' : '#152f2729', -.15);
+  }
+  stroke(`M2 ${top + 12} V${bottom - 8}`, '#e3dc982e', 3.5);
+  ctx.restore();
+  ctx.restore();
+}
+
+function trunk(x, y, slant) {
+  shape(`M${x - 12} ${y - 58} L${x + 13} ${y - 58} Q${x + 10} ${y - 26} ${x + 10 + slant} ${y}
+    Q${x + slant - 1} ${y + 7} ${x + slant - 14} ${y}Z`,
+    tint(x - 16, y - 24, x + 16, y, '#ae7d48', '#735137', '#493b2b'));
+  stroke(`M${x - 6} ${y - 35} q-2 15 ${slant - 3} 31`, '#ca9b5e87', 2.4);
+}
+
+function snowCrystal(x, y, scale) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(scale, scale);
+  for (let i = 0; i < 6; i++) {
+    ctx.rotate(Math.PI / 3);
+    stroke('M2 2 V-24 M-6 -19 L2 -12 L10 -19 M-4 -11 L2 -6 L8 -11', '#566e65', 5.1);
+  }
+  for (let i = 0; i < 6; i++) {
+    ctx.rotate(Math.PI / 3);
+    stroke('M0 0 V-24 M-7 -20 L0 -13 L7 -20 M-5 -12 L0 -8 L5 -12', '#e7e5ce', 3.8);
+    stroke('M-1 -2 V-23', '#fff6de', 1);
+  }
+  oval(0, 0, 3.6, 3.6, '#f4ead1');
+  ctx.restore();
+}
+
+function star(x, y) {
+  const points = Array.from({ length: 10 }, (_, i) => {
+    const angle = -Math.PI / 2 + i * Math.PI / 5;
+    const r = i % 2 ? 10 : 21;
+    return `${x + Math.cos(angle) * r} ${y + Math.sin(angle) * r}`;
+  });
+  const path = 'M' + points.join('L') + 'Z';
+  if (lampsOn) glow(x, y, 57, '#ffcf763b', '#ffcf7600');
+  shape(path, tint(x - 12, y - 20, x + 12, y + 20, '#f5d891', '#c7934b', '#a4773f'), '#b1844b', 2);
+  stroke(`M${x - 11} ${y - 5} L${x - 3} ${y - 8} L${x} ${y - 16}`, '#fff1b0b9', 1.6);
+}
+
+function bauble(x, y, radius, cream) {
+  oval(x + 1.4, y + 2.3, radius + .8, radius, '#253e31a1');
+  const c = cream ? ['#fff3c9', '#c1b995', '#847e62'] : ['#f4cd76', '#bc8b44', '#765a33'];
+  oval(x, y, radius, radius, tint(x - radius, y - radius, x + radius, y + radius, ...c));
+  oval(x - radius * .27, y - radius * .31, radius * .29, radius * .17, '#fff5d1b3');
+}
+
+function trees() {
+  oval(572, 710, 169, 27, '#32473766', -.03);
+  oval(771, 710, 136, 24, '#32473769', .04);
+  trunk(613, 709, -4);
+  trunk(723, 706, 5);
+  const layers = [[654, -1, leftBottom], [681, 1, rightBottom], [654, -1, leftTop], [681, 1, rightTop]];
+  for (const [edge, direction, tiers] of layers) {
+    for (let i = tiers.length - 1; i >= 0; i--) branch(edge, direction, tiers[i]);
+  }
+  star(646, 126);
+  snowCrystal(608, 379, .8);
+
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = '900 24px system-ui, sans-serif';
+  [...'ENHYPEN'].forEach((letter, index) => {
+    const y = 135 + index * 24;
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 2.2;
+    ctx.strokeStyle = '#455140';
+    ctx.strokeText(letter, 695, y + 2);
+    ctx.fillStyle = tint(684, y - 11, 705, y + 12, '#f8e0a5', '#cba76c', '#a38858');
+    ctx.fillText(letter, 694, y);
+  });
+  ctx.restore();
+
+  const pieces = [
+    [619, 208, 4.1, true], [580, 285, 5, false], [630, 328, 4, true],
+    [595, 434, 5, false], [541, 480, 5.6, true], [618, 512, 4.9, false],
+    [481, 550, 5.8, false], [544, 598, 5.3, false], [452, 623, 4.9, true],
+    [598, 652, 4.9, true], [716, 363, 4, true], [751, 425, 4.9, false],
+    [705, 457, 4.4, true], [751, 552, 5.6, false], [815, 603, 5.1, true],
+    [728, 631, 5.2, false], [857, 646, 4.6, true]
+  ];
+  for (const [x, y, size, cream] of pieces) bauble(x, y, size, cream);
+}
+
+function foreground() {
+  for (const [x, y, scale] of [[62, 735, 1.24], [1094, 702, .82], [1257, 757, 1.25]]) urn(x, y, scale);
+  lantern(397, 668, .77);
+  lantern(966, 677, 1.0);
+  lantern(1129, 597, .63);
+  for (const [x, y, w] of [[350, 744, 25], [901, 723, 32], [1040, 760, 44], [118, 772, 53], [1162, 808, 68]]) {
+    oval(x, y + 1.5, w, w * .15, '#50654b6b');
+    shape(`M${x - w} ${y} q${w * .44} -7 ${w * .82} -6 q${w * .4} -7 ${w * 1.15} 5 Q${x} ${y + 7} ${x - w} ${y}Z`, '#eee4c1a5');
+  }
+  const vignette = ctx.createRadialGradient(667, 412, 360, 682, 410, 824);
+  vignette.addColorStop(0, '#122a2200');
+  vignette.addColorStop(1, '#14292087');
+  ctx.fillStyle = vignette;
+  ctx.fillRect(0, 0, W, H);
+}
+
+function paintScene() {
+  seed = 232621;
+  sky();
+  wall();
+  ground();
+  cabin();
+  trees();
+  foreground();
+}
+
+function frameScene() {
+  const stage = scene.parentElement;
+  const viewRatio = stage.clientWidth / stage.clientHeight;
+  // Keep both silhouettes intact at both portrait and ultrawide aspect ratios.
+  const fit = viewRatio > W / 740 ? 'contain' : 'cover';
+  scene.style.objectFit = fit;
+  snow.style.objectFit = fit;
+}
+new ResizeObserver(frameScene).observe(scene.parentElement);
+
+seed = 10811;
+const particles = Array.from({ length: 58 }, () => ({
+  x: random() * W, y: random() * H, size: .7 + random() * 1.9,
+  drift: 5 + random() * 15, speed: 12 + random() * 25, phase: random() * 6.3
+}));
+let frameId = 0;
+let lastPaint = 0;
+let elapsed = 0;
+
+function paintSnow(now) {
+  frameId = requestAnimationFrame(paintSnow);
+  if (now - lastPaint < 1000 / 30) return;
+  elapsed += lastPaint ? Math.min(.08, (now - lastPaint) / 1000) : 0;
+  lastPaint = now;
+  flakes.clearRect(0, 0, W, H);
+  for (const p of particles) {
+    const x = p.x + Math.sin(elapsed * .48 + p.phase) * p.drift;
+    const y = (p.y + p.speed * elapsed) % (H + 12) - 6;
+    flakes.beginPath();
+    flakes.arc(x, y, p.size, 0, Math.PI * 2);
+    flakes.fillStyle = p.size > 1.6 ? '#fff1c7a3' : '#fff6dbc4';
+    flakes.fill();
+  }
+}
+
+function syncSnow() {
+  snowSwitch.setAttribute('aria-pressed', String(snowOn));
+  cancelAnimationFrame(frameId);
+  frameId = 0;
+  lastPaint = 0;
+  flakes.clearRect(0, 0, W, H);
+  if (snowOn && !document.hidden) frameId = requestAnimationFrame(paintSnow);
+}
+
+lampSwitch.addEventListener('click', () => {
+  lampsOn = !lampsOn;
+  lampSwitch.setAttribute('aria-pressed', String(lampsOn));
+  paintScene();
+});
+snowSwitch.addEventListener('click', () => {
+  snowOn = !snowOn;
+  syncSnow();
+});
+quietMotion.addEventListener('change', () => {
+  snowOn = !quietMotion.matches;
+  syncSnow();
+});
+document.addEventListener('visibilitychange', syncSnow);
+paintScene();
+frameScene();
+syncSnow();
+}
+
+function startCourtyard3D() {
+  const stage = document.querySelector('.stage');
+  const canvas = document.querySelector('#orbit-view');
+  const gl = canvas.getContext('webgl', { alpha: true, antialias: true });
+  if (!gl) return false;
+
+  const vertexSource = `
+    attribute vec3 aPosition, aNormal, aColor;
+    attribute float aGlow;
+    uniform vec3 uEye, uRight, uUp, uForward;
+    uniform vec2 uScale;
+    varying vec3 vPosition, vNormal, vColor;
+    varying float vGlow;
+    void main() {
+      vec3 delta = aPosition - uEye;
+      float depth = dot(delta, uForward);
+      gl_Position = vec4(dot(delta, uRight) * uScale.x, dot(delta, uUp) * uScale.y,
+        depth * 1.0005 - 0.11, depth);
+      vPosition = aPosition;
+      vNormal = aNormal;
+      vColor = aColor;
+      vGlow = aGlow;
+    }`;
+  const fragmentSource = `
+    precision mediump float;
+    varying vec3 vPosition, vNormal, vColor;
+    varying float vGlow;
+    uniform float uLamps;
+    float lamp(vec3 location, vec3 n) {
+      vec3 ray = location - vPosition;
+      float distance = length(ray);
+      return max(0.0, dot(n, ray / max(distance, .01))) / (1.0 + distance * distance * 1.8);
+    }
+    void main() {
+      vec3 n = normalize(vNormal);
+      float diffuse = max(dot(n, normalize(vec3(-.44, .76, .54))), 0.0);
+      float rim = max(dot(n, normalize(vec3(.58, .33, -.68))), 0.0);
+      float glow = uLamps * (
+        lamp(vec3(-2.7, 1.3, 1.35), n) * .65 +
+        lamp(vec3( 2.4, 1.02, 1.55), n) * .74);
+      float grain = fract(sin(dot(floor(vPosition * 195.0), vec3(24.89, 43.81, 18.18))) * 3789.3);
+      vec3 surface = vColor * (.63 + diffuse * .43 + rim * .16 + (grain - .5) * .067);
+      surface += vec3(1.0, .58, .24) * glow * .38;
+      surface = mix(surface, mix(vColor * .53, vec3(1.0, .78, .37), uLamps), vGlow);
+      gl_FragColor = vec4(surface, 1.0);
+    }`;
+
+  function shader(type, source) {
+    const code = gl.createShader(type);
+    gl.shaderSource(code, source);
+    gl.compileShader(code);
+    if (!gl.getShaderParameter(code, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(code));
+    return code;
+  }
+
+  const program = gl.createProgram();
+  try {
+    gl.attachShader(program, shader(gl.VERTEX_SHADER, vertexSource));
+    gl.attachShader(program, shader(gl.FRAGMENT_SHADER, fragmentSource));
+    gl.linkProgram(program);
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) return false;
+  } catch (error) {
+    console.warn('3D renderer unavailable:', error.message);
+    return false;
+  }
+
+  const TAU = Math.PI * 2;
+  const add = (a, b) => a.map((v, i) => v + b[i]);
+  const sub = (a, b) => a.map((v, i) => v - b[i]);
+  const mul = (v, n) => v.map(x => x * n);
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const unit = v => mul(v, 1 / (Math.hypot(...v) || 1));
+  const mix = (a, b, t) => add(mul(a, 1 - t), mul(b, t));
+  const rgb = hex => [0, 2, 4].map(i => parseInt(hex.slice(i, i + 2), 16) / 255);
+  const limit = (value, low, high) => Math.max(low, Math.min(high, value));
+  const up = [0, 1, 0];
+  const vertices = [];
+  let randomSeed = 12617;
+  function random() {
+    randomSeed = (Math.imul(randomSeed, 1664525) + 1013904223) >>> 0;
+    return randomSeed / 4294967296;
+  }
+
+  function vertex(point, normal, color, glow) {
+    vertices.push(...point, ...normal, ...color, glow);
+  }
+
+  function triangle(a, b, c, color, glow = 0, normals) {
+    const flat = unit(cross(sub(b, a), sub(c, a)));
+    vertex(a, normals?.[0] ?? flat, color, glow);
+    vertex(b, normals?.[1] ?? flat, color, glow);
+    vertex(c, normals?.[2] ?? flat, color, glow);
+  }
+
+  function quad(a, b, c, d, color, glow = 0, normals) {
+    triangle(a, b, c, color, glow, normals?.slice(0, 3));
+    triangle(a, c, d, color, glow, normals && [normals[0], normals[2], normals[3]]);
+  }
+
+  function ellipsoid(center, size, color, segments = 12, rows = 7, glow = 0) {
+    function point(angle, latitude) {
+      const n = [Math.cos(latitude) * Math.cos(angle), Math.sin(latitude), Math.cos(latitude) * Math.sin(angle)];
+      return [add(center, n.map((v, i) => v * size[i])), unit(n.map((v, i) => v / size[i]))];
+    }
+    for (let j = 0; j < rows; j++) {
+      const a = -Math.PI / 2 + j * Math.PI / rows;
+      const b = a + Math.PI / rows;
+      for (let i = 0; i < segments; i++) {
+        const x = i * TAU / segments, y = (i + 1) * TAU / segments;
+        const corners = [point(x, a), point(y, a), point(y, b), point(x, b)];
+        quad(...corners.map(p => p[0]), color, glow, corners.map(p => p[1]));
+      }
+    }
+  }
+
+  function tube(start, end, radius, color, tip = radius, steps = 8, glow = 0) {
+    const axis = unit(sub(end, start));
+    const u = unit(cross(axis, Math.abs(axis[1]) < .85 ? up : [1, 0, 0]));
+    const v = cross(axis, u);
+    for (let i = 0; i < steps; i++) {
+      const radial = a => add(mul(u, Math.cos(a)), mul(v, Math.sin(a)));
+      const n = radial(i * TAU / steps), m = radial((i + 1) * TAU / steps);
+      const a = add(start, mul(n, radius)), b = add(start, mul(m, radius));
+      const c = add(end, mul(m, tip)), d = add(end, mul(n, tip));
+      quad(a, b, c, d, color, glow, [n, m, m, n]);
+      triangle(start, b, a, color, glow, [mul(axis, -1), mul(axis, -1), mul(axis, -1)]);
+      triangle(end, d, c, color, glow, [axis, axis, axis]);
+    }
+  }
+
+  function box(x, y, z, w, h, d, color, glow = 0) {
+    const a = [x-w/2, y, z+d/2], b = [x+w/2, y, z+d/2];
+    const c = [x+w/2, y+h, z+d/2], e = [x-w/2, y+h, z+d/2];
+    const f = [x-w/2, y, z-d/2], g = [x+w/2, y, z-d/2];
+    const j = [x+w/2, y+h, z-d/2], k = [x-w/2, y+h, z-d/2];
+    quad(a,b,c,e,color,glow); quad(b,g,j,c,color,glow);
+    quad(g,f,k,j,color,glow); quad(f,a,e,k,color,glow);
+    quad(e,c,j,k,color,glow); quad(f,g,b,a,color,glow);
+  }
+
+  function rimPlatform() {
+    const outline = [[-.39, .92], [-.34, .98], [-.24, 1], [-.07, 1], [.01, .985], [.035, .94]];
+    function rim([y, r], angle) {
+      const edge = 1 + Math.cos(angle * 3 + .38) * .037 + Math.sin(angle * 5) * .017;
+      return [4.63*r*edge*Math.cos(angle), y, 3.36*r*edge*Math.sin(angle)];
+    }
+    const colors = ['594433','7d6148','937756','a9ad8b','d1cfad'].map(rgb);
+    for (let i = 0; i < 80; i++) {
+      const a = i * TAU / 80, b = (i + 1) * TAU / 80;
+      for (let j = 0; j < outline.length - 1; j++) {
+        const bottom = outline[j], top = outline[j+1];
+        const p = rim(bottom, a), q = rim(top, a), r = rim(top, b), s = rim(bottom, b);
+        const vertical = limit((bottom[1] - top[1]) * 4.2 / (top[0] - bottom[0]), -.80, 1.5);
+        const na=unit([Math.cos(a), vertical, Math.sin(a)]), nb=unit([Math.cos(b), vertical, Math.sin(b)]);
+        quad(p,q,r,s,colors[j],0,[na,na,nb,nb]);
+      }
+      const top = outline.at(-1);
+      triangle([0,top[0],0], rim(top,b), rim(top,a), rgb('c9c8a7'), 0, [up,up,up]);
+    }
+  }
+
+  function patch(x,z,rx,rz,color,y = .043,phase = 0) {
+    for (let i = 0; i < 24; i++) {
+      function point(angle) {
+        const wobble = 1 + .085*Math.sin(angle*3+phase);
+        return [x + rx*Math.cos(angle)*wobble, y, z + rz*Math.sin(angle)*wobble];
+      }
+      triangle([x,y,z], point((i+1)*TAU/24), point(i*TAU/24), color,0,[up,up,up]);
+    }
+  }
+
+  function courtyard() {
+    rimPlatform();
+    patch(.39, .83, 2.37, .97, rgb('a5ad8c'), .046);
+    patch(-2.75, -.52, 1.38, 1.11, rgb('a1a488'), .047);
+    patch(2.45, 1.51, .38, .20, rgb('adaf8f'), .049);
+    for (let i = 0; i < 76; i++) {
+      const x = (random() - .5) * 7.96, z = (random() - .5) * 5.84;
+      if ((x/4.12)**2+(z/2.98)**2 > 1) continue;
+      const r = .035 + random()*.115;
+      patch(x,z,r,r*.62,rgb(i%4 ? 'd5d1ac' : 'b8bd9c'),.054,i);
+    }
+
+    const trail = [
+      [-2.62,.008,.54,.21], [-2.6,.33,.62,.19], [-2.5,.67,.67,.23], [-2.29,.99,.71,.24],
+      [-2.15,1.35,.68,.26], [-1.95,1.72,.74,.27], [-1.75,2.10,.79,.28], [-1.58,2.45,.84,.27]
+    ];
+    for (const [x,z,w,d] of trail) {
+      ellipsoid([x, .032, z],[w*.5,.047,d*.5],rgb('a89876'),12,4);
+      patch(x-.02,z-.02,w*.37,d*.35,rgb('cfbf96'),.077);
+    }
+
+    for (let i = 0; i < 14; i++) {
+      const angle = Math.PI * (.96 + i * 1.02 / 13);
+      const x = Math.cos(angle)*3.91, z = Math.sin(angle)*2.55;
+      if (i > 0 && i < 3) continue;
+      for (let row=0; row<2; row++) {
+        ellipsoid([x, .125+row*.17,z],[.38,.12,.24],rgb(row ? '95947c' : '858875'),10,5);
+      }
+      ellipsoid([x,.352,z],[.4,.065,.25],rgb('e3dcc0'),12,5);
+    }
+    cottage(-2.60,-.83);
+    lantern(-2.1,1.17,.72);
+    lantern(2.42,1.57,1);
+    lantern(2.84,-1.0,.71);
+    planter(-3.45,1.2,1);
+    planter(3.36,.13,1);
+    planter(3.05,2.0,.69);
+  }
+
+  function cottage(x,z) {
+    const wood=rgb('8f684a'), dark=rgb('614836'), trim=rgb('a17b51'), snow=rgb('ece1bf');
+    box(x,.057,z,1.83,1.17,1.48,wood);
+    for (let i=0;i<7;i++) {
+      const y=.15+i*.151;
+      box(x,y,z,1.844,.018,1.494,i%2?rgb('74543b'):trim);
+    }
+    const L=x-1.07,R=x+1.07,F=z+.89,B=z-.89;
+    function roof(y,thickness,spread,color) {
+      const lf=[L-spread,y,F+spread],rf=[R+spread,y,F+spread];
+      const lb=[L-spread,y,B-spread],rb=[R+spread,y,B-spread];
+      const ridgeF=[x,y+.72,F+spread],ridgeB=[x,y+.72,B-spread];
+      const drop=p=>add(p,[0,-thickness,0]);
+      quad(lf,ridgeF,ridgeB,lb,color);
+      quad(ridgeF,rf,rb,ridgeB,color);
+      quad(lf,drop(lf),drop(ridgeF),ridgeF,color);
+      quad(ridgeF,drop(ridgeF),drop(rf),rf,color);
+      quad(lb,ridgeB,drop(ridgeB),drop(lb),color);
+      quad(ridgeB,rb,drop(rb),drop(ridgeB),color);
+      quad(lf,lb,drop(lb),drop(lf),color);
+      quad(rf,drop(rf),drop(rb),rb,color);
+    }
+    triangle([L,1.19,z+.736],[R,1.19,z+.736],[x,1.87,z+.736],wood,0,[[0,0,1],[0,0,1],[0,0,1]]);
+    triangle([R,1.19,z-.736],[L,1.19,z-.736],[x,1.87,z-.736],wood,0,[[0,0,-1],[0,0,-1],[0,0,-1]]);
+    roof(1.229,.12,0,dark);
+    roof(1.288,.067,.036,snow);
+    box(x-.47,1.51,z-.31,.27,.56,.283,rgb('896750'));
+    box(x-.47,2.035,z-.31,.315,.085,.32,snow);
+    box(x,.07,z+.751,.42,.82,.055,dark);
+    box(x-.16,.085,z+.781,.033,.79,.018,trim);
+    ellipsoid([x+.127,.49,z+.793],[.032,.032,.019],rgb('c9a45e'),8,5);
+
+    for (const [offset,y,side] of [[-.58,.46,1],[.58,.46,1],[0,1.32,1],[-.45,.53,-1],[.45,.53,-1]]) {
+      const wx=x+offset, wz=z+side*.751;
+      const size=y>1 ? .29 : .34;
+      box(wx,y-.025,wz,size+.108,size+.1,.057,dark);
+      box(wx,y,wz+side*.041,size,size,.035,rgb('b68450'),.84);
+      box(wx,y,wz+side*.063,.035,size,.026,trim);
+      box(wx,y+size*.48,wz+side*.065,size,.034,.027,trim);
+      box(wx,y-.025,wz+side*.052,size+.103,.035,.12,snow);
+    }
+  }
+
+  function lantern(x,z,s) {
+    const post=rgb('475347'), gold=rgb('b68d57'), glass=rgb('b88553');
+    ellipsoid([x,.071,z],[.16*s,.065,.15*s],post,10,5);
+    tube([x,.07,z],[x,.77*s,z],.037*s,post,.028*s);
+    box(x,.73*s,z,.20*s,.042*s,.20*s,post);
+    box(x,.775*s,z,.16*s,.222*s,.16*s,glass,.90);
+    for (const a of [-1,1]) for (const b of [-1,1]) {
+      tube([x+a*.08*s,.77*s,z+b*.08*s],[x+a*.105*s,1.015*s,z+b*.105*s],.014*s,post);
+    }
+    box(x,1.00*s,z,.24*s,.027*s,.24*s,post);
+    tube([x,1.027*s,z],[x,1.145*s,z],.16*s,gold,.027*s,4);
+  }
+
+  function planter(x,z,s) {
+    const pot=rgb('917253'), dirt=rgb('665c42');
+    tube([x,.055,z],[x,.24*s+.055,z],.132*s,pot,.19*s,14);
+    ellipsoid([x,.24*s+.055,z],[.197*s,.031*s,.197*s],pot);
+    ellipsoid([x,.257*s+.055,z],[.157*s,.019*s,.157*s],dirt);
+    for (let i=0;i<7;i++) {
+      const a=TAU*i/7, h=.38+random()*.36;
+      const end=[x+Math.cos(a)*.23*s,h*s,z+Math.sin(a)*.23*s];
+      tube([x,.26*s,z],end,.012*s,rgb('526b48'),.007*s,5);
+      ellipsoid(end,[.107*s,.047*s,.084*s],rgb(i%2?'72935f':'889b64'),8,5);
+    }
+  }
+
+  const greens = [
+    ['799657','466f4d','234e40'], ['6e9e68','3e7957','245746'], ['62a17d','39785d','234f44'],
+    ['9aaf6a','668d58','325c49'], ['82a873','4a855f','285547'], ['6c9b63','4d8057','284f3e']
+  ].map(palette=>palette.map(rgb));
+
+  // Each tier has a continuous rounded outer surface and an actual planar inner edge.
+  const profile = [[0,.77],[.05,.94],[.13,1],[.22,.985],[.34,.86],[.48,.69],[.62,.54],[.77,.43],[.88,.29],[.96,.16],[1,.075]];
+  const treeDepth = .85;
+  function tier(edge,direction,[bottom,top,width,shade],decorate) {
+    const depth=Math.min(.73,width*.58+.06), height=top-bottom;
+    const palette=greens[shade], steps=26;
+    function shell(a,ring) {
+      const [heightFraction,spread]=profile[ring];
+      const envelope=Math.sin((heightFraction*.91+.08)*Math.PI);
+      const crease=Math.cos(16*a+heightFraction*2)*.018*spread;
+      const scallop=Math.cos((a+1.57)*13+bottom*4)*.036*(1-heightFraction)**4;
+      return [edge+direction*width*(spread+crease)*Math.cos(a),
+        bottom+height*heightFraction+scallop,
+        treeDepth+depth*(spread+crease*.5)*Math.sin(a)*(1+envelope*.04)];
+    }
+    function normal(a,ring) {
+      const across=sub(shell(a+.003,ring),shell(a-.003,ring));
+      const along=sub(shell(a,Math.min(ring+1,profile.length-1)),shell(a,Math.max(ring-1,0)));
+      return mul(unit(cross(across,along)),-direction);
+    }
+    for (let j=0;j<profile.length-1;j++) {
+      const upper=profile[j][0];
+      for (let i=0;i<steps;i++) {
+        const a=-Math.PI/2+i*Math.PI/steps, b=a+Math.PI/steps;
+        const color=upper<.5 ? mix(palette[2],palette[1],upper*2) : mix(palette[1],palette[0],(upper-.5)*2);
+        const shaded=mul(color,1+.046*Math.cos((a+b)*8+upper*2));
+        quad(shell(a,j),shell(b,j),shell(b,j+1),shell(a,j+1),shaded,0,
+          [normal(a,j),normal(b,j),normal(b,j+1),normal(a,j+1)]);
+      }
+      const n=[-direction,0,0], left=-Math.PI/2, right=Math.PI/2;
+      quad(shell(left,j),shell(right,j),shell(right,j+1),shell(left,j+1),
+        mix(palette[1],palette[0],.4+upper*.32),0,[n,n,n,n]);
+    }
+    for (const ring of [0,profile.length-1]) {
+      const p=[edge,bottom+height*profile[ring][0],treeDepth];
+      const n=ring===0 ? [0,-1,0] : up;
+      for (let i=0;i<steps;i++) {
+        const a=-Math.PI/2+i*Math.PI/steps;
+        triangle(p,shell(a,ring),shell(a+Math.PI/steps,ring),palette[ring===0?2:0],0,[n,n,n]);
+      }
+    }
+    if (decorate) for (const [i,angle] of [[0,.80+random()*.33],[1,-.67-random()*.46]]) {
+      const ring=2+Math.floor(random()*3), radial=normal(angle,ring);
+      const center=add(shell(angle,ring),mul(radial,.022));
+      const size=.029+random()*.017;
+      ellipsoid(center,[size,size,size],rgb(i?'e3d6ae':'d5aa63'),9,5);
+    }
+  }
+
+  function crystal(x,y,z,size) {
+    const cream=rgb('eae6cc');
+    const center=[x,y,z];
+    const hand=(angle,r)=>[x+Math.sin(angle)*size*r,y+Math.cos(angle)*size*r,z];
+    for (let i=0;i<6;i++) {
+      const angle=i*TAU/6;
+      tube(center,hand(angle,1),size*.065,cream,size*.05,7);
+      for (const tilt of [-1,1]) {
+        tube(hand(angle,.56),hand(angle+tilt*.30,.83),size*.053,cream,size*.046,6);
+      }
+    }
+    ellipsoid(center,[size*.12,size*.12,size*.11],cream,9,6);
+  }
+
+  function star(cx,cy,cz) {
+    const gold=rgb('e7be70');
+    const inner=rgb('b28b53');
+    for (let i=0;i<10;i++) {
+      function point(index) {
+        const angle=Math.PI/2-index*TAU/10, r=index%2?.126:.236;
+        return [cx+Math.cos(angle)*r,cy+Math.sin(angle)*r,cz];
+      }
+      const a=point(i), b=point(i+1);
+      triangle([cx,cy,cz+.067],b,a,gold);
+      triangle([cx,cy,cz-.067],a,b,inner);
+    }
+  }
+
+  function letters(x,y,z) {
+    const glyphs={
+      E:[[[1,1],[0,1],[0,0],[1,0]],[[0,.53],[.79,.53]]],
+      N:[[[0,0],[0,1],[1,0],[1,1]]],
+      H:[[[0,0],[0,1]],[[1,0],[1,1]],[[0,.5],[1,.5]]],
+      Y:[[[0,1],[.5,.55],[1,1]],[[.5,.55],[.5,0]]],
+      P:[[[0,0],[0,1],[.72,1],[1,.83],[.97,.65],[.7,.55],[0,.55]]]
+    };
+    const gold=rgb('dfbb7b');
+    [...'ENHYPEN'].forEach((letter,i)=>{
+      const point=([a,b])=>[x+(a-.5)*.135,y-i*.205+b*.142,z];
+      for (const line of glyphs[letter]) {
+        line.forEach((p,j)=>{
+          const world=point(p);
+          ellipsoid(world,[.019,.019,.019],gold,8,5);
+          if(j) tube(point(line[j-1]),world,.019,gold,.019,8);
+        });
+      }
+    });
+  }
+
+  courtyard();
+  const left=.26, right=.49;
+  for (const [edge,direction,bottom,top] of [
+    [left,-1,[[.35,1.23,2.00,3],[.68,1.49,1.91,2],[1.06,1.83,1.77,1],[1.43,2.17,1.60,0],[1.76,2.47,1.38,2],[2.11,2.69,1.21,4]],
+      [[3.09,3.79,1.14,1],[3.44,4.13,1.02,0],[3.76,4.47,.80,2],[4.07,4.77,.60,1],[4.39,5.00,.40,3]]],
+    [right,1,[[.36,1.08,1.57,1],[.63,1.36,1.49,4],[.95,1.64,1.36,0],[1.24,1.83,1.05,2]],
+      [[2.23,2.89,1.03,1],[2.53,3.14,.84,0],[2.83,3.47,.59,2],[3.12,3.71,.39,4]]]
+  ]) {
+    const radius=direction===-1?.112:.083;
+    const trunkX=edge+direction*.34;
+    tube([trunkX,.044,treeDepth],[trunkX,.61,treeDepth],radius,rgb('a17449'),radius*.81,11);
+    [...bottom,...top].forEach((piece,i)=>tier(edge,direction,piece,i%3!==1));
+  }
+  star(left-.037,5.185,treeDepth);
+  crystal(left-.38,2.88,treeDepth+.045,.147);
+  letters(right+.075,4.986,treeDepth+.065);
+
+  const mesh = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, mesh);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+  gl.useProgram(program);
+  gl.enable(gl.DEPTH_TEST);
+  gl.clearColor(0,0,0,0);
+  for (const [name,components,offset] of [['aPosition',3,0],['aNormal',3,3],['aColor',3,6],['aGlow',1,9]]) {
+    const location=gl.getAttribLocation(program,name);
+    gl.enableVertexAttribArray(location);
+    gl.vertexAttribPointer(location,components,gl.FLOAT,false,40,offset*4);
+  }
+  const uniforms=Object.fromEntries(['uEye','uRight','uUp','uForward','uScale','uLamps'].map(name=>[name,gl.getUniformLocation(program,name)]));
+  const count=vertices.length/10;
+  vertices.length=0;
+
+  const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)');
+  const weatherCanvas=document.querySelector('#snow');
+  const weather=weatherCanvas.getContext('2d');
+  const lampButton=document.querySelector('#lamp-switch');
+  const snowButton=document.querySelector('#snow-switch');
+  const spinButton=document.querySelector('#spin-switch');
+  const resetButton=document.querySelector('#reset-view');
+  const particles=Array.from({length:52},()=>[random(),random(),.75+random()*1.45,random()*.048+.025,random()*TAU]);
+
+  const initial={yaw:-.07,pitch:.21,zoom:1};
+  let {yaw,pitch,zoom}=initial;
+  let lights=true, snowing=!reducedMotion.matches, spinning=false;
+  let dirty=true, frame=0, previous=0, lastWeather=0, time=0, drag=null;
+
+  function drawScene() {
+    const aspect=canvas.width/canvas.height;
+    const distance=14.2*zoom*Math.max(1,1.11/aspect);
+    const target=[0,2.33,0];
+    const offset=mul([Math.sin(yaw)*Math.cos(pitch),Math.sin(pitch),Math.cos(yaw)*Math.cos(pitch)],distance);
+    const eye=add(target,offset), forward=unit(mul(offset,-1)), right=unit(cross(forward,up)), vertical=cross(right,forward);
+    gl.viewport(0,0,canvas.width,canvas.height);
+    gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+    gl.uniform3fv(uniforms.uEye,eye);
+    gl.uniform3fv(uniforms.uForward,forward);
+    gl.uniform3fv(uniforms.uRight,right);
+    gl.uniform3fv(uniforms.uUp,vertical);
+    gl.uniform2f(uniforms.uScale,3.21/aspect,3.21);
+    gl.uniform1f(uniforms.uLamps,lights?1:0);
+    gl.drawArrays(gl.TRIANGLES,0,count);
+  }
+
+  function drawSnow() {
+    const {width,height}=weatherCanvas;
+    weather.clearRect(0,0,width,height);
+    weather.fillStyle='#fff0c9ad';
+    for (const [x,y,r,speed,phase] of particles) {
+      const px=((x+Math.sin(time*.7+phase)*.013+1)%1)*width;
+      const py=((y+time*speed)%1)*height;
+      weather.beginPath();
+      weather.arc(px,py,r,0,TAU);
+      weather.fill();
+    }
+  }
+
+  function animate(now) {
+    frame=0;
+    const delta=previous?Math.min(.05,(now-previous)/1000):0;
+    previous=now;
+    time+=delta;
+    if(spinning) {
+      yaw=(yaw+delta*.35)%TAU;
+      dirty=true;
+    }
+    if(dirty) {
+      drawScene();
+      dirty=false;
+    }
+    if(snowing && now-lastWeather>1000/30) {
+      drawSnow();
+      lastWeather=now;
+    }
+    if(spinning||snowing) requestFrame();
+    else previous=0;
+  }
+
+  function requestFrame() {
+    if(!frame&&!document.hidden) frame=requestAnimationFrame(animate);
+  }
+
+  function changeView() {
+    dirty=true;
+    requestFrame();
+  }
+
+  function resize() {
+    const dpr=Math.min(window.devicePixelRatio||1,1.6);
+    canvas.width=Math.max(1,Math.round(stage.clientWidth*dpr));
+    canvas.height=Math.max(1,Math.round(stage.clientHeight*dpr));
+    weatherCanvas.width=Math.max(1,stage.clientWidth);
+    weatherCanvas.height=Math.max(1,stage.clientHeight);
+    changeView();
+  }
+
+  function setSpin(value) {
+    spinning=value;
+    spinButton.setAttribute('aria-pressed',String(value));
+    requestFrame();
+  }
+
+  function reset() {
+    ({yaw,pitch,zoom}=initial);
+    setSpin(false);
+    changeView();
+  }
+
+  canvas.addEventListener('pointerdown',event=>{
+    if(drag||event.button!==0) return;
+    setSpin(false);
+    drag={id:event.pointerId,x:event.clientX,y:event.clientY};
+    canvas.setPointerCapture(event.pointerId);
+    canvas.classList.add('dragging');
+  });
+  canvas.addEventListener('pointermove',event=>{
+    if(drag?.id!==event.pointerId) return;
+    yaw=(yaw-(event.clientX-drag.x)*.009)%TAU;
+    pitch=limit(pitch+(event.clientY-drag.y)*.006,.08,1.15);
+    drag={id:drag.id,x:event.clientX,y:event.clientY};
+    changeView();
+  });
+  canvas.addEventListener('lostpointercapture',()=> {
+    drag=null;
+    canvas.classList.remove('dragging');
+  });
+  canvas.addEventListener('wheel',event=>{
+    event.preventDefault();
+    zoom=limit(zoom*Math.exp(event.deltaY*.001),.70,1.6);
+    changeView();
+  },{passive:false});
+  canvas.addEventListener('keydown',event=>{
+    if(event.key==='ArrowLeft') yaw-=.15;
+    else if(event.key==='ArrowRight') yaw+=.15;
+    else if(event.key==='ArrowUp') pitch=limit(pitch+.075,.08,1.15);
+    else if(event.key==='ArrowDown') pitch=limit(pitch-.075,.08,1.15);
+    else if(event.key==='Home') reset();
+    else return;
+    event.preventDefault();
+    setSpin(false);
+    changeView();
+  });
+  spinButton.addEventListener('click',()=>setSpin(!spinning));
+  resetButton.addEventListener('click',reset);
+  lampButton.addEventListener('click',()=>{
+    lights=!lights;
+    lampButton.setAttribute('aria-pressed',String(lights));
+    stage.dataset.lamps=lights?'on':'off';
+    changeView();
+  });
+  function setSnow(value) {
+    snowing=value;
+    snowButton.setAttribute('aria-pressed',String(snowing));
+    if(!value) weather.clearRect(0,0,weatherCanvas.width,weatherCanvas.height);
+    requestFrame();
+  }
+  snowButton.addEventListener('click',()=>setSnow(!snowing));
+  reducedMotion.addEventListener('change',()=>{
+    if(reducedMotion.matches) setSpin(false);
+    setSnow(!reducedMotion.matches);
+  });
+  document.addEventListener('visibilitychange',()=>{
+    if(document.hidden) {
+      cancelAnimationFrame(frame);
+      frame=0;
+      previous=0;
+    } else requestFrame();
+  });
+  canvas.addEventListener('webglcontextlost',event=>event.preventDefault());
+  canvas.addEventListener('webglcontextrestored',()=>location.reload());
+  stage.classList.add('is-3d');
+  setSnow(snowing);
+  resize();
+  new ResizeObserver(resize).observe(stage);
+  return true;
+}
+
+if (!startCourtyard3D()) startCourtyard2D();
+</script>
+</body>
+</html>
